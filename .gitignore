@@ -4,9 +4,6 @@ __pycache__/
 *$py.class
 *.so
 .Python
-env/
-venv/
-ENV/
 build/
 develop-eggs/
 dist/
@@ -25,10 +22,16 @@ wheels/
 
 # Reflex
 .web/
-reflex.db
-*.db
+assets/reflex.db
 
-# IDE
+# Environment
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDEs
 .vscode/
 .idea/
 *.swp
