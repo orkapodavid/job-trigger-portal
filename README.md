@@ -1,225 +1,320 @@
 # Job Trigger Management Portal
 
-A modern, production-ready job scheduling and monitoring system built with Reflex framework and Python. Manage automated tasks with real-time execution tracking and comprehensive logging.
+A production-ready, modular Python application for managing and scheduling automated job execution. Built with [Reflex](https://reflex.dev) for the web UI and a decoupled worker process for robust background job execution.
 
-![Job Trigger Portal](https://img.shields.io/badge/Python-3.9+-blue.svg)
-![Reflex](https://img.shields.io/badge/Reflex-Latest-purple.svg)
+![Python](https://img.shields.io/badge/python-3.11+-blue.svg)
+![Reflex](https://img.shields.io/badge/reflex-0.4+-purple.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
-## Features
+## 🎯 Key Features
 
-✨ **Intuitive Dashboard**
-- Clean, modern UI with real-time updates
-- Sortable and filterable job table
-- Visual status indicators with color-coded badges
-- One-click job activation/deactivation
+- **Decoupled Architecture**: Separate UI and worker processes for stability and scalability
+- **Non-Blocking Execution**: Multi-threaded worker prevents long-running jobs from blocking others
+- **Drift-Free Scheduling**: Jobs run at precise intervals regardless of execution time
+- **Security-First**: Path traversal protection restricts script execution to approved directory
+- **Real-Time Updates**: UI automatically refreshes job status and execution logs
+- **Database Agnostic**: Easily migrate from SQLite to PostgreSQL, MSSQL, or other databases
 
-🔄 **Flexible Scheduling**
-- Support for multiple time units (seconds, minutes, hours, days)
-- Human-readable interval formatting
-- Instant "Run Now" functionality
-- Automatic next-run calculation
+## 📋 Table of Contents
 
-📊 **Comprehensive Logging**
-- Detailed execution history for each job
-- Full stdout/stderr capture
-- Status tracking (SUCCESS, FAILURE, ERROR, RUNNING)
-- Searchable log viewer with code highlighting
+- [Architecture](#architecture)
+- [Quick Start](#quick-start)
+- [Usage](#usage)
+- [Configuration](#configuration)
+- [Production Deployment](#production-deployment)
+- [Database Migration](#database-migration)
+- [API Reference](#api-reference)
 
-🏗️ **Robust Architecture**
-- Decoupled worker process for reliable execution
-- SQLModel ORM with database-agnostic design
-- Easy migration path to MS SQL Server, PostgreSQL, MySQL
-- Graceful error handling and recovery
+## 🏗️ Architecture
 
-## Quick Start
+
+┌─────────────────────────────────────────────────────────────┐
+│                     Reflex Web UI (Frontend)                 │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │   Dashboard  │  │  Job Creator │  │  Log Viewer  │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+└──────────────────────────┬──────────────────────────────────┘
+                           │ (State Management)
+                           ▼
+                  ┌─────────────────┐
+                  │  SQLite/MSSQL   │
+                  │    Database     │
+                  └─────────────────┘
+                           ▲
+                           │ (Direct SQL Queries)
+                           │
+┌──────────────────────────┴──────────────────────────────────┐
+│              Worker Process (Background)                     │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
+│  │ Polling  │→ │Threading │→ │ Execute  │→ │  Log     │   │
+│  │  Loop    │  │  Engine  │  │  Script  │  │ Results  │   │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘   │
+└─────────────────────────────────────────────────────────────┘
+
+
+### Key Design Decisions
+
+1. **Threading Model**: Uses Python threading to execute multiple jobs concurrently without blocking the polling loop
+2. **Scheduling Strategy**: Calculates next_run timestamp BEFORE execution to prevent drift
+3. **Security Sandbox**: Restricts all script execution to `app/scripts/` directory
+4. **Timezone Aware**: Uses UTC timestamps throughout for consistency across deployments
+
+## 🚀 Quick Start
 
 ### Prerequisites
-- Python 3.9 or higher
-- pip package manager
+
+- Python 3.11+
+- pip
 
 ### Installation
 
-1. Clone the repository:
-bash
-git clone https://github.com/orkapodavid/job-trigger-portal.git
-cd job-trigger-portal
+1. **Clone the repository**
+   bash
+   git clone https://github.com/orkapodavid/job-trigger-portal.git
+   cd job-trigger-portal
+   
 
+2. **Install dependencies**
+   bash
+   pip install -r requirements.txt
+   
 
-2. Install dependencies:
-bash
-pip install -r requirements.txt
+3. **Initialize the database**
+   bash
+   python -c "from app.models import init_db; init_db()"
+   
 
+4. **Start the worker process**
+   bash
+   python -m app.worker
+   
 
-3. Initialize the database:
-bash
-python -c "from app.models import init_db; init_db()"
+5. **Start the web UI** (in a separate terminal)
+   bash
+   reflex run
+   
 
+6. **Open your browser**
+   Navigate to `http://localhost:3000`
 
-### Running the Application
-
-1. Start the worker process (in one terminal):
-bash
-python app/worker.py
-
-
-2. Start the web application (in another terminal):
-bash
-reflex run
-
-
-3. Open your browser to `http://localhost:3000`
-
-## Usage
+## 📖 Usage
 
 ### Creating a Job
 
-1. Click the "New Job" button
-2. Enter job details:
-   - **Job Name**: Descriptive name for the task
-   - **Script Path**: Absolute path to your Python script (e.g., `/path/to/script.py`)
-   - **Interval**: How often to run (e.g., "5 Hours")
-3. Click "Create Job"
+1. Click the **"New Job"** button
+2. Fill in the form:
+   - **Job Name**: Descriptive name for the job
+   - **Script Path**: Filename (e.g., `my_script.py`) - file must exist in `app/scripts/`
+   - **Run Every**: Interval value and unit (Seconds, Minutes, Hours, Days)
+3. Click **"Create Job"**
 
 ### Managing Jobs
 
-- **Activate/Pause**: Toggle the play/pause button
+- **Activate/Deactivate**: Toggle the status badge to pause/resume a job
 - **Run Now**: Click the play icon to execute immediately
-- **Delete**: Click the trash icon to remove the job
-- **View Logs**: Click on a job row to see execution history
+- **Delete**: Click the trash icon to remove the job and its logs
+- **View Logs**: Click any job row to see its execution history
 
-### Example Test Script
+### Adding Custom Scripts
 
-The repository includes a test script at `app/scripts/test_job.py`:
+1. Create your Python script in `app/scripts/`
+2. Ensure it's executable and uses proper exit codes:
+   
+   # app/scripts/my_job.py
+   import sys
+   
+   def main():
+       try:
+           # Your job logic here
+           print("Job completed successfully")
+           sys.exit(0)  # Success
+       except Exception as e:
+           print(f"Error: {e}", file=sys.stderr)
+           sys.exit(1)  # Failure
+   
+   if __name__ == "__main__":
+       main()
+   
 
+## ⚙️ Configuration
 
-import sys
-import datetime
-import time
+### Environment Variables
 
-def main():
-    print(f"[{datetime.datetime.now()}] Starting Test Job Execution...")
-    print("Step 1: Initialization complete.")
-    time.sleep(1)
-    print("Step 2: Processing data...")
-    print(f"[{datetime.datetime.now()}] Job Completed Successfully.")
-    sys.exit(0)
+- `REFLEX_DB_URL`: Database connection string (default: `sqlite:///reflex.db`)
 
-if __name__ == "__main__":
-    main()
+#### Example Configurations
 
-
-## Database Configuration
-
-By default, the application uses SQLite (`reflex.db`). To use a different database:
-
-1. Set the `REFLEX_DB_URL` environment variable:
-
+**SQLite (default)**
 bash
-# PostgreSQL
-export REFLEX_DB_URL="postgresql://user:pass@localhost/dbname"
-
-# MySQL
-export REFLEX_DB_URL="mysql+pymysql://user:pass@localhost/dbname"
-
-# MS SQL Server (see migration guide)
-export REFLEX_DB_URL="mssql+pyodbc://user:pass@server/db?driver=ODBC+Driver+17+for+SQL+Server"
+export REFLEX_DB_URL="sqlite:///reflex.db"
 
 
-2. See `app/mssql_migration_guide.md` for detailed MS SQL Server setup instructions
-
-## Project Structure
-
-
-job-trigger-portal/
-├── app/
-│   ├── __init__.py
-│   ├── app.py              # Main Reflex application
-│   ├── models.py           # Database models (SQLModel)
-│   ├── state.py            # Reflex state management
-│   ├── job_manager.py      # UI components
-│   ├── worker.py           # Background job executor
-│   ├── mssql_migration_guide.md
-│   └── scripts/
-│       └── test_job.py     # Example job script
-├── requirements.txt
-├── rxconfig.py
-└── README.md
+**PostgreSQL**
+bash
+export REFLEX_DB_URL="postgresql://user:password@localhost/jobdb"
 
 
-## Architecture
-
-### Decoupled Design
-
-The system uses a **decoupled architecture** with two independent processes:
-
-1. **Web Application (Reflex)**: Handles UI, user interactions, and database CRUD operations
-2. **Worker Process**: Continuously polls for scheduled jobs and executes them
-
-This separation ensures:
-- UI remains responsive during job execution
-- Jobs run reliably even if the web server restarts
-- Easy horizontal scaling (multiple workers)
-- Clear separation of concerns
-
-### Data Flow
+**Microsoft SQL Server**
+bash
+export REFLEX_DB_URL="mssql+pyodbc://user:password@server/database?driver=ODBC+Driver+17+for+SQL+Server"
 
 
-User → Web UI → Database ← Worker Process → Script Execution
-                    ↓
-              Execution Logs
+### Worker Configuration
+
+Edit `app/worker.py` to customize:
+- Poll interval (default: 5 seconds)
+- Job timeout (default: 300 seconds)
+- Log level
+
+## 🚀 Production Deployment
+
+### Running as a Service (systemd)
+
+1. **Create worker service file** `/etc/systemd/system/job-worker.service`:
+   ini
+   [Unit]
+   Description=Job Trigger Worker
+   After=network.target
+
+   [Service]
+   Type=simple
+   User=www-data
+   WorkingDirectory=/path/to/job-trigger-portal
+   Environment="REFLEX_DB_URL=sqlite:///reflex.db"
+   ExecStart=/usr/bin/python3 -m app.worker
+   Restart=always
+
+   [Install]
+   WantedBy=multi-user.target
+   
+
+2. **Create web UI service file** `/etc/systemd/system/job-ui.service`:
+   ini
+   [Unit]
+   Description=Job Trigger Web UI
+   After=network.target
+
+   [Service]
+   Type=simple
+   User=www-data
+   WorkingDirectory=/path/to/job-trigger-portal
+   ExecStart=/usr/bin/reflex run --env production
+   Restart=always
+
+   [Install]
+   WantedBy=multi-user.target
+   
+
+3. **Enable and start services**
+   bash
+   sudo systemctl enable job-worker job-ui
+   sudo systemctl start job-worker job-ui
+   
+
+### Using Docker
+
+dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+# Initialize database
+RUN python -c "from app.models import init_db; init_db()"
+
+# Run worker and UI
+CMD ["sh", "-c", "python -m app.worker & reflex run --env production"]
 
 
-## Advanced Configuration
+## 🗄️ Database Migration
 
-### Auto-Refresh Settings
+### SQLite → MS SQL Server
 
-Modify in `app/state.py`:
+See the comprehensive guide: [`app/mssql_migration_guide.md`](app/mssql_migration_guide.md)
 
-auto_refresh: bool = True  # Enable/disable auto-refresh
-log_limit: int = 50        # Maximum logs to display
+Key steps:
+1. Install ODBC Driver 17/18 for SQL Server
+2. Execute provided T-SQL schema
+3. Update `REFLEX_DB_URL` environment variable
+4. Restart both worker and UI processes
+
+## 📚 API Reference
+
+### Models
+
+#### ScheduledJob
+
+class ScheduledJob(SQLModel, table=True):
+    id: Optional[int]
+    name: str
+    script_path: str
+    interval_seconds: int
+    is_active: bool = True
+    next_run: Optional[datetime]
 
 
-### Worker Polling Interval
+#### JobExecutionLog
 
-Modify in `app/worker.py`:
-
-sleep_duration = 5  # Check for jobs every 5 seconds
-
-
-### Script Execution Timeout
-
-Modify in `app/worker.py`:
-
-result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)  # 5 minutes
+class JobExecutionLog(SQLModel, table=True):
+    id: Optional[int]
+    job_id: int  # Foreign key to ScheduledJob
+    run_time: datetime
+    status: str  # 'SUCCESS', 'FAILURE', 'ERROR'
+    log_output: str  # Captured stdout/stderr
 
 
-## Troubleshooting
+### State Methods
 
-### "Script not found" Error
-- Ensure the script path is absolute (e.g., `/full/path/to/script.py`)
-- Verify file permissions are executable
-- Check that the file exists before creating the job
+- `load_jobs()`: Fetch all jobs from database
+- `add_job()`: Create new scheduled job
+- `toggle_job_status(job_id)`: Activate/deactivate job
+- `delete_job(job_id)`: Remove job and its logs
+- `run_job_now(job_id)`: Force immediate execution
+- `load_logs()`: Fetch logs for selected job
 
-### Jobs Not Executing
-- Verify the worker process is running (`python app/worker.py`)
-- Check job is marked as "Active"
-- Review worker logs for errors
-- Ensure `next_run` time is in the past
+## 🛡️ Security Features
 
-### Database Connection Issues
-- Check `REFLEX_DB_URL` environment variable
-- Verify database server is accessible
-- Ensure database user has proper permissions
+1. **Path Traversal Protection**: Scripts restricted to `app/scripts/` directory
+2. **Input Validation**: All user inputs validated and sanitized
+3. **Subprocess Isolation**: Jobs run in isolated subprocess with timeout
+4. **SQL Injection Prevention**: Parameterized queries via SQLModel/SQLAlchemy
 
-## Contributing
+## 🔧 Troubleshooting
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+### Worker not executing jobs
+- Check that `app/scripts/` directory exists and contains your scripts
+- Verify file permissions (scripts must be readable)
+- Check worker logs for errors: `python -m app.worker`
 
-## License
+### Jobs showing as "ERROR" status
+- Ensure script path is correct (filename only, not full path)
+- Check script has proper shebang or use `.py` extension
+- Review log output in UI for detailed error messages
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+### Database locked errors (SQLite)
+- SQLite has limited concurrent write capability
+- Consider migrating to PostgreSQL or MSSQL for production
+- Ensure only one worker process is running
 
-## Support
+## 📝 License
 
-For issues, questions, or feature requests, please open an issue on GitHub.
+MIT License - see LICENSE file for details
+
+## 🤝 Contributing
+
+Contributions welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new functionality
+4. Submit a pull request
+
+## 📧 Contact
+
+For questions or support, open an issue on GitHub.
+
+---
+
+**Built with ❤️ using Reflex Framework**
