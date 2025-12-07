@@ -3,17 +3,29 @@ from app.state import State
 from app.models import ScheduledJob, JobExecutionLog
 
 
+def format_datetime(date_val: rx.Var) -> rx.Component:
+    """Format a datetime value to a readable string using rx.moment."""
+    return rx.moment(date_val, format="YYYY-MM-DD HH:mm")
+
+
+def format_interval(job: dict) -> rx.Component:
+    """Display the pre-calculated formatted interval string."""
+    return rx.el.span(job["formatted_interval"])
+
+
 def status_indicator(is_active: bool) -> rx.Component:
     return rx.el.div(
         rx.cond(
             is_active,
             rx.el.span(
+                rx.el.span(class_name="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"),
                 "Active",
-                class_name="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800",
+                class_name="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-100",
             ),
             rx.el.span(
+                rx.el.span(class_name="w-1.5 h-1.5 rounded-full bg-slate-400 mr-1.5"),
                 "Inactive",
-                class_name="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800",
+                class_name="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-50 text-slate-600 border border-slate-200",
             ),
         )
     )
@@ -95,16 +107,28 @@ def create_job_modal() -> rx.Component:
                 ),
                 rx.el.div(
                     rx.el.label(
-                        "Interval (seconds)",
+                        "Run Every",
                         class_name="block text-sm font-medium text-gray-700 mb-1",
                     ),
-                    rx.el.input(
-                        on_change=State.set_new_job_interval,
-                        type="number",
-                        min="1",
-                        placeholder="3600",
-                        class_name="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent",
-                        default_value=State.new_job_interval,
+                    rx.el.div(
+                        rx.el.input(
+                            on_change=State.set_new_job_interval_value,
+                            type="number",
+                            min="1",
+                            placeholder="1",
+                            class_name="flex-1 rounded-l-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:z-10",
+                            default_value=State.new_job_interval_value,
+                        ),
+                        rx.el.select(
+                            rx.el.option("Seconds", value="Seconds"),
+                            rx.el.option("Minutes", value="Minutes"),
+                            rx.el.option("Hours", value="Hours"),
+                            rx.el.option("Days", value="Days"),
+                            value=State.new_job_interval_unit,
+                            on_change=State.set_new_job_interval_unit,
+                            class_name="w-32 rounded-r-md border-l-0 border border-gray-300 px-3 py-2 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:z-10",
+                        ),
+                        class_name="flex rounded-md shadow-sm",
                     ),
                     class_name="mb-6",
                 ),
@@ -152,25 +176,31 @@ def job_row(job: dict) -> rx.Component:
             status_indicator(job["is_active"]), class_name="px-6 py-4 whitespace-nowrap"
         ),
         rx.el.td(
-            rx.el.span(
-                job["interval_seconds"].to_string() + "s", class_name="text-gray-500"
-            ),
+            rx.el.span(format_interval(job), class_name="text-gray-500"),
             class_name="px-6 py-4 whitespace-nowrap text-sm",
         ),
         rx.el.td(
             rx.el.span(
-                rx.cond(job["next_run"], job["next_run"].to_string(), "Not scheduled"),
-                class_name="text-gray-500",
+                rx.cond(
+                    job["next_run"], format_datetime(job["next_run"]), "Not scheduled"
+                ),
+                class_name="text-gray-500 font-mono text-xs",
             ),
             class_name="px-6 py-4 whitespace-nowrap text-sm",
         ),
         rx.el.td(
             rx.el.div(
                 rx.el.button(
+                    rx.icon("circle_play", class_name="h-4 w-4 text-violet-600"),
+                    on_click=lambda: State.run_job_now(job["id"]),
+                    class_name="p-1.5 hover:bg-violet-50 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+                    title="Run Now",
+                ),
+                rx.el.button(
                     rx.cond(
                         job["is_active"],
-                        rx.icon("pause", class_name="h-4 w-4 text-orange-600"),
-                        rx.icon("play", class_name="h-4 w-4 text-green-600"),
+                        rx.icon("pause", class_name="h-4 w-4 text-amber-600"),
+                        rx.icon("play", class_name="h-4 w-4 text-emerald-600"),
                     ),
                     on_click=lambda: State.toggle_job_status(job["id"]),
                     class_name="p-1.5 hover:bg-gray-100 rounded-md transition-colors",
@@ -182,7 +212,7 @@ def job_row(job: dict) -> rx.Component:
                     class_name="p-1.5 hover:bg-red-50 rounded-md transition-colors",
                     title="Delete Job",
                 ),
-                class_name="flex items-center space-x-2",
+                class_name="flex items-center space-x-1",
             ),
             class_name="px-6 py-4 whitespace-nowrap text-right text-sm font-medium",
         ),
@@ -374,16 +404,27 @@ def log_item(log: JobExecutionLog) -> rx.Component:
 def execution_logs_panel() -> rx.Component:
     return rx.el.div(
         rx.el.div(
-            rx.icon("activity", class_name="h-5 w-5 text-gray-500 mr-2"),
-            rx.el.h2(
+            rx.el.div(
+                rx.icon("activity", class_name="h-5 w-5 text-violet-600 mr-2"),
+                rx.el.h2(
+                    rx.cond(
+                        State.selected_job_name,
+                        State.selected_job_name,
+                        "Execution Logs",
+                    ),
+                    class_name="text-lg font-semibold text-gray-900 truncate",
+                ),
+                class_name="flex items-center",
+            ),
+            rx.el.p(
                 rx.cond(
                     State.selected_job_name,
-                    f"History: {State.selected_job_name}",
-                    "Execution Logs",
+                    "View past execution results",
+                    "Select a job to view details",
                 ),
-                class_name="text-lg font-semibold text-gray-900",
+                class_name="text-xs text-gray-500 mt-1 ml-7",
             ),
-            class_name="flex items-center mb-6",
+            class_name="mb-6 pb-6 border-b border-gray-100",
         ),
         rx.cond(
             State.selected_job_id,
@@ -392,37 +433,51 @@ def execution_logs_panel() -> rx.Component:
                     State.logs,
                     rx.el.div(
                         rx.el.div(
-                            rx.foreach(State.logs, log_item),
-                            class_name="space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar pr-2",
+                            rx.el.h3(
+                                "Recent Executions",
+                                class_name="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3",
+                            ),
+                            rx.el.div(
+                                rx.foreach(State.logs, log_item),
+                                class_name="space-y-2 overflow-y-auto custom-scrollbar pr-1 max-h-[calc(100vh-350px)]",
+                            ),
+                            class_name="flex flex-col flex-1 min-h-0",
                         ),
                         rx.cond(State.selected_log_entry, log_detail_view()),
-                        class_name="flex flex-col gap-4",
+                        class_name="flex flex-col gap-6 h-full",
                     ),
                     rx.el.div(
                         rx.el.div(
-                            rx.icon("clock", class_name="h-8 w-8 text-gray-300 mb-2"),
+                            rx.icon("clock", class_name="h-10 w-10 text-gray-200 mb-3"),
                             rx.el.p(
                                 "No execution history yet.",
-                                class_name="text-sm text-gray-500",
+                                class_name="text-sm text-gray-600 font-medium",
                             ),
-                            class_name="flex flex-col items-center justify-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-200",
+                            rx.el.p(
+                                "Run the job to generate logs.",
+                                class_name="text-xs text-gray-400 mt-1",
+                            ),
+                            class_name="flex flex-col items-center justify-center py-16 bg-gray-50/50 rounded-xl border border-dashed border-gray-200",
                         )
                     ),
                 ),
-                class_name="flex flex-col h-full",
+                class_name="flex flex-col h-full overflow-hidden",
             ),
             rx.el.div(
                 rx.el.div(
-                    rx.icon("mouse-pointer-2", class_name="h-8 w-8 text-gray-300 mb-2"),
-                    rx.el.p(
-                        "Select a job to view logs.", class_name="text-sm text-gray-500"
+                    rx.icon(
+                        "mouse-pointer-2", class_name="h-10 w-10 text-gray-200 mb-3"
                     ),
-                    class_name="flex flex-col items-center justify-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-200",
+                    rx.el.p(
+                        "Select a job to view logs.",
+                        class_name="text-sm text-gray-600 font-medium",
+                    ),
+                    class_name="flex flex-col items-center justify-center py-16 bg-gray-50/50 rounded-xl border border-dashed border-gray-200",
                 ),
                 class_name="flex flex-col h-full",
             ),
         ),
-        class_name="bg-white border-l border-gray-200 p-6 h-full min-h-screen w-96 flex-shrink-0",
+        class_name="bg-white border-l border-gray-200 p-6 h-full min-h-screen w-96 flex-shrink-0 flex flex-col shadow-[rgba(0,0,0,0.05)_-4px_0px_16px] z-10",
     )
 
 
