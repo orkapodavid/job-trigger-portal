@@ -4,10 +4,11 @@ import logging
 import os
 from sqlmodel import Session, select, desc, create_engine
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from app.models import ScheduledJob, JobExecutionLog, get_db_url, init_db
 
 engine = create_engine(get_db_url())
+SCRIPTS_DIR = os.path.join(os.getcwd(), "app", "scripts")
 
 
 class State(rx.State):
@@ -77,7 +78,7 @@ class State(rx.State):
                         return rx.toast.error(
                             "Cannot run inactive job. Please activate it first."
                         )
-                    job.next_run = datetime.utcnow()
+                    job.next_run = datetime.now(timezone.utc)
                     session.add(job)
                     session.commit()
                     return rx.toast.info(
@@ -93,9 +94,11 @@ class State(rx.State):
         """Create a new scheduled job."""
         if not self.new_job_name or not self.new_job_script_path:
             return rx.window_alert("Name and Script Path are required.")
-        if not os.path.exists(self.new_job_script_path):
+        script_filename = os.path.basename(self.new_job_script_path)
+        full_script_path = os.path.join(SCRIPTS_DIR, script_filename)
+        if not os.path.exists(full_script_path):
             return rx.window_alert(
-                f"Script not found at: {self.new_job_script_path}\nPlease ensure the file exists in the project root."
+                f"Script '{script_filename}' not found in {SCRIPTS_DIR}.\nPlease ensure the file exists in the app/scripts directory."
             )
         try:
             val = int(self.new_job_interval_value)
@@ -116,10 +119,10 @@ class State(rx.State):
             with Session(engine) as session:
                 new_job = ScheduledJob(
                     name=self.new_job_name,
-                    script_path=self.new_job_script_path,
+                    script_path=full_script_path,
                     interval_seconds=interval_seconds,
                     is_active=True,
-                    next_run=datetime.utcnow(),
+                    next_run=datetime.now(timezone.utc),
                 )
                 session.add(new_job)
                 session.commit()
@@ -144,7 +147,7 @@ class State(rx.State):
                 if job:
                     job.is_active = not job.is_active
                     if job.is_active:
-                        job.next_run = datetime.utcnow()
+                        job.next_run = datetime.now(timezone.utc)
                     session.add(job)
                     session.commit()
             self.load_jobs()
