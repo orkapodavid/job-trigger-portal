@@ -1,10 +1,14 @@
 import reflex as rx
 from sqlmodel import Field, Relationship, SQLModel, create_engine
 from sqlalchemy import Column, Text
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 import os
 import logging
+
+
+def get_utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class ScheduledJob(SQLModel, table=True):
@@ -45,7 +49,7 @@ class JobExecutionLog(SQLModel, table=True):
     __tablename__ = "job_execution_logs"
     id: Optional[int] = Field(default=None, primary_key=True)
     job_id: int = Field(foreign_key="scheduled_jobs.id", index=True, nullable=False)
-    run_time: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    run_time: datetime = Field(default_factory=get_utc_now, nullable=False)
     status: str = Field(nullable=False)
     log_output: str = Field(default="", sa_column=Column(Text, nullable=True))
     job: Optional[ScheduledJob] = Relationship(back_populates="logs")
