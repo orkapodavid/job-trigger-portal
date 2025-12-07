@@ -4,14 +4,10 @@ import sys
 import os
 import logging
 import signal
-from datetime import datetime, timedelta
+import threading
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from sqlmodel import Session, select, create_engine
-
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-if parent_dir not in sys.path:
-    sys.path.insert(0, parent_dir)
 from app.models import ScheduledJob, JobExecutionLog, get_db_url, init_db
 
 logging.basicConfig(
@@ -30,15 +26,12 @@ def handle_signal(signum, frame):
     running = False
 
 
-def run_job(job: ScheduledJob, engine) -> None:
-    """Execute a single job and log the result."""
-    logger.info(f"Starting execution of job: {job.name} (ID: {job.id})")
-    start_time = datetime.utcnow()
+def execute_job_thread(job_id: int, job_name: str, script_path: str, engine):
+    """Execute the job script in a separate thread to prevent blocking."""
+    logger.info(f"Starting execution thread for job: {job_name} (ID: {job_id})")
+    start_time = datetime.now(timezone.utc)
     status = "RUNNING"
     log_output = ""
-    script_path = job.script_path
-    interval_seconds = job.interval_seconds
-    job_id = job.id
     try:
         if not os.path.exists(script_path):
             raise FileNotFoundError(f"Script not found at path: {script_path}")
@@ -68,25 +61,47 @@ def run_job(job: ScheduledJob, engine) -> None:
         status = "ERROR"
         log_output = f"Unexpected Error: {str(e)}"
         logger.exception(f"Job {job_id} failed with unexpected error")
-    with Session(engine) as session:
-        current_job = session.get(ScheduledJob, job_id)
-        if current_job:
-            next_run = datetime.utcnow() + timedelta(seconds=interval_seconds)
-            current_job.next_run = next_run
-            session.add(current_job)
+    try:
+        with Session(engine) as session:
             execution_log = JobExecutionLog(
                 job_id=job_id, run_time=start_time, status=status, log_output=log_output
             )
             session.add(execution_log)
-            try:
-                session.commit()
-                logger.info(
-                    f"Job {current_job.name} finished with status {status}. Next run: {next_run}"
-                )
-            except Exception as e:
-                logger.exception(f"Failed to commit transaction for job {job_id}: {e}")
-        else:
-            logger.warning(f"Job {job_id} no longer exists in database.")
+            session.commit()
+            logger.info(f"Job {job_name} execution finished with status {status}.")
+    except Exception as e:
+        logger.exception(f"Failed to save log for job {job_id}: {e}")
+
+
+def process_job(job: ScheduledJob, engine) -> None:
+    """
+    Schedule next run and spawn execution thread.
+
+    Calculating next_run BEFORE execution eliminates drift caused by execution time.
+    """
+    try:
+        with Session(engine) as session:
+            current_job = session.get(ScheduledJob, job.id)
+            if not current_job:
+                logger.warning(f"Job {job.id} no longer exists, skipping.")
+                return
+            now = datetime.now(timezone.utc)
+            next_run = now + timedelta(seconds=current_job.interval_seconds)
+            current_job.next_run = next_run
+            session.add(current_job)
+            session.commit()
+            logger.info(f"Scheduled next run for '{current_job.name}' at {next_run}")
+            job_id = current_job.id
+            job_name = current_job.name
+            script_path = current_job.script_path
+    except Exception as e:
+        logger.exception(f"Failed to update schedule for job {job.id}: {e}")
+        return
+    t = threading.Thread(
+        target=execute_job_thread, args=(job_id, job_name, script_path, engine)
+    )
+    t.daemon = True
+    t.start()
 
 
 def main():
@@ -100,7 +115,7 @@ def main():
     while running:
         try:
             with Session(engine) as session:
-                now = datetime.utcnow()
+                now = datetime.now(timezone.utc)
                 query = (
                     select(ScheduledJob)
                     .where(ScheduledJob.is_active == True)
@@ -114,7 +129,7 @@ def main():
                 for job in jobs:
                     if not running:
                         break
-                    run_job(job, engine)
+                    process_job(job, engine)
         except Exception as e:
             logger.exception(f"Error in main polling loop: {e}")
             time.sleep(5)
