@@ -24,12 +24,14 @@ running = True
 
 
 def handle_signal(signum, frame):
+    """Handle termination signals for graceful shutdown."""
     global running
     logger.info("Received termination signal. Shutting down gracefully...")
     running = False
 
 
 def run_job(job: ScheduledJob, engine) -> None:
+    """Execute a single job and log the result."""
     logger.info(f"Starting execution of job: {job.name} (ID: {job.id})")
     start_time = datetime.utcnow()
     status = "RUNNING"
@@ -88,6 +90,7 @@ def run_job(job: ScheduledJob, engine) -> None:
 
 
 def main():
+    """Main worker loop."""
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
     init_db()
@@ -106,6 +109,8 @@ def main():
                     )
                 )
                 jobs = session.exec(query).all()
+                if not jobs:
+                    pass
                 for job in jobs:
                     if not running:
                         break
