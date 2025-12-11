@@ -6,6 +6,7 @@ import logging
 import signal
 import threading
 from datetime import datetime, timedelta, timezone
+from dateutil.relativedelta import relativedelta
 from typing import Optional
 from sqlmodel import Session, select, create_engine
 from app.models import ScheduledJob, JobExecutionLog, get_db_url, init_db
@@ -73,6 +74,48 @@ def execute_job_thread(job_id: int, job_name: str, script_path: str, engine):
         logger.exception(f"Failed to save log for job {job_id}: {e}")
 
 
+def calculate_next_run(job: ScheduledJob) -> datetime:
+    """
+    Calculate the next scheduled run time based on schedule configuration.
+    """
+    now = datetime.now(timezone.utc)
+    if job.schedule_type == "interval" or not job.schedule_type:
+        return now + timedelta(seconds=job.interval_seconds)
+    hour = 0
+    minute = 0
+    if job.schedule_time:
+        try:
+            parts = job.schedule_time.split(":")
+            hour = int(parts[0])
+            minute = int(parts[1])
+        except (ValueError, IndexError) as e:
+            logger.exception(f"Error parsing schedule_time: {e}")
+    target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if job.schedule_type == "hourly":
+        target = now.replace(minute=minute, second=0, microsecond=0)
+        if target <= now:
+            target += timedelta(hours=1)
+    elif job.schedule_type == "daily":
+        if target <= now:
+            target += timedelta(days=1)
+    elif job.schedule_type == "weekly":
+        target_day = job.schedule_day if job.schedule_day is not None else 0
+        current_weekday = target.weekday()
+        days_ahead = target_day - current_weekday
+        target = target + timedelta(days=days_ahead)
+        if target <= now:
+            target += timedelta(weeks=1)
+    elif job.schedule_type == "monthly":
+        target_day = job.schedule_day if job.schedule_day is not None else 1
+        try:
+            target = target + relativedelta(day=target_day)
+        except ValueError as e:
+            logger.exception(f"Error applying monthly schedule: {e}")
+        if target <= now:
+            target += relativedelta(months=1, day=target_day)
+    return target
+
+
 def process_job(job: ScheduledJob, engine) -> None:
     """
     Schedule next run and spawn execution thread.
@@ -85,8 +128,7 @@ def process_job(job: ScheduledJob, engine) -> None:
             if not current_job:
                 logger.warning(f"Job {job.id} no longer exists, skipping.")
                 return
-            now = datetime.now(timezone.utc)
-            next_run = now + timedelta(seconds=current_job.interval_seconds)
+            next_run = calculate_next_run(current_job)
             current_job.next_run = next_run
             session.add(current_job)
             session.commit()
