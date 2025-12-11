@@ -32,6 +32,7 @@
 - [x] Push app/worker.py - Calendar-based next_run calculations
 - [x] Push app/job_manager.py - Dynamic schedule type forms
 - [x] Push requirements.txt - Added python-dateutil
+- [x] Push plan.md - Updated project plan
 - [x] Verify repository updated at https://github.com/orkapodavid/job-trigger-portal
 
 ### Summary of Changes:
@@ -40,3 +41,7 @@
 - **worker.py**: Calendar-based calculate_next_run() using python-dateutil
 - **job_manager.py**: Dynamic form fields based on schedule type selection
 - **requirements.txt**: Added python-dateutil dependency
+
+### Repository:
+- **URL**: https://github.com/orkapodavid/job-trigger-portal
+- **Status**: All changes pushed successfully
