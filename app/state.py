@@ -2,6 +2,7 @@ import reflex as rx
 import asyncio
 import logging
 import os
+import pytz
 from sqlmodel import Session, select, desc, create_engine
 from typing import Optional
 from datetime import datetime, timezone
@@ -9,6 +10,63 @@ from app.models import ScheduledJob, JobExecutionLog, get_db_url, init_db
 
 engine = create_engine(get_db_url())
 SCRIPTS_DIR = os.path.join(os.getcwd(), "app", "scripts")
+HKT = pytz.timezone("Asia/Hong_Kong")
+
+
+def utc_to_hkt_schedule(schedule_type: str, time_str: str, day_val: Optional[int]):
+    """Convert stored UTC schedule parameters to HKT for display."""
+    if not time_str:
+        return (time_str, day_val)
+    try:
+        h, m = map(int, time_str.split(":"))
+        dt_utc = None
+        if schedule_type == "daily":
+            dt_utc = datetime(2024, 1, 1, h, m, 0, tzinfo=timezone.utc)
+        elif schedule_type == "weekly":
+            dt_utc = datetime(2024, 1, 1 + (day_val or 0), h, m, 0, tzinfo=timezone.utc)
+        elif schedule_type == "monthly":
+            dt_utc = datetime(2024, 1, day_val or 1, h, m, 0, tzinfo=timezone.utc)
+        else:
+            return (time_str, day_val)
+        dt_hkt = dt_utc.astimezone(HKT)
+        new_time = dt_hkt.strftime("%H:%M")
+        new_day = None
+        if schedule_type == "weekly":
+            new_day = dt_hkt.weekday()
+        elif schedule_type == "monthly":
+            new_day = dt_hkt.day
+        return (new_time, new_day)
+    except Exception as e:
+        logging.exception(f"Error converting UTC to HKT: {e}")
+        return (time_str, day_val)
+
+
+def hkt_to_utc_schedule(schedule_type: str, time_str: str, day_val: Optional[int]):
+    """Convert input HKT schedule parameters to UTC for storage."""
+    if not time_str:
+        return (time_str, day_val)
+    try:
+        h, m = map(int, time_str.split(":"))
+        dt_hkt = None
+        if schedule_type == "daily":
+            dt_hkt = datetime(2024, 1, 1, h, m, 0, tzinfo=HKT)
+        elif schedule_type == "weekly":
+            dt_hkt = datetime(2024, 1, 1 + (day_val or 0), h, m, 0, tzinfo=HKT)
+        elif schedule_type == "monthly":
+            dt_hkt = datetime(2024, 1, day_val or 1, h, m, 0, tzinfo=HKT)
+        else:
+            return (time_str, day_val)
+        dt_utc = dt_hkt.astimezone(timezone.utc)
+        new_time = dt_utc.strftime("%H:%M")
+        new_day = None
+        if schedule_type == "weekly":
+            new_day = dt_utc.weekday()
+        elif schedule_type == "monthly":
+            new_day = dt_utc.day
+        return (new_time, new_day)
+    except Exception as e:
+        logging.exception(f"Error converting HKT to UTC: {e}")
+        return (time_str, day_val)
 
 
 class State(rx.State):
@@ -74,8 +132,14 @@ class State(rx.State):
                         minute = parts[1] if len(parts) > 1 else "00"
                         job_dict["formatted_interval"] = f"Every hour at :{minute}"
                     elif schedule_type == "daily":
-                        job_dict["formatted_interval"] = f"Daily at {job.schedule_time}"
+                        hkt_time, _ = utc_to_hkt_schedule(
+                            "daily", job.schedule_time, None
+                        )
+                        job_dict["formatted_interval"] = f"Daily at {hkt_time} (HKT)"
                     elif schedule_type == "weekly":
+                        hkt_time, hkt_day = utc_to_hkt_schedule(
+                            "weekly", job.schedule_time, job.schedule_day
+                        )
                         days_map = {
                             0: "Monday",
                             1: "Tuesday",
@@ -85,13 +149,16 @@ class State(rx.State):
                             5: "Saturday",
                             6: "Sunday",
                         }
-                        day_name = days_map.get(job.schedule_day, "Unknown Day")
+                        day_name = days_map.get(hkt_day, "Unknown Day")
                         job_dict["formatted_interval"] = (
-                            f"Every {day_name} at {job.schedule_time}"
+                            f"Every {day_name} at {hkt_time} (HKT)"
                         )
                     elif schedule_type == "monthly":
+                        hkt_time, hkt_day = utc_to_hkt_schedule(
+                            "monthly", job.schedule_time, job.schedule_day
+                        )
                         job_dict["formatted_interval"] = (
-                            f"Monthly on day {job.schedule_day} at {job.schedule_time}"
+                            f"Monthly on day {hkt_day} at {hkt_time} (HKT)"
                         )
                     else:
                         job_dict["formatted_interval"] = "Unknown Schedule"
@@ -155,16 +222,20 @@ class State(rx.State):
                     raise ValueError("Minute must be between 0 and 59")
                 schedule_time = f"00:{minute_val:02d}"
             elif schedule_type == "daily":
-                schedule_time = self.new_job_schedule_time
+                schedule_time, _ = hkt_to_utc_schedule(
+                    "daily", self.new_job_schedule_time, None
+                )
             elif schedule_type == "weekly":
-                schedule_time = self.new_job_schedule_time
-                schedule_day = int(self.new_job_schedule_day)
+                schedule_time, schedule_day = hkt_to_utc_schedule(
+                    "weekly", self.new_job_schedule_time, int(self.new_job_schedule_day)
+                )
             elif schedule_type == "monthly":
-                schedule_time = self.new_job_schedule_time
                 day_val = int(self.new_job_schedule_day)
                 if not 1 <= day_val <= 31:
                     raise ValueError("Day of month must be between 1 and 31")
-                schedule_day = day_val
+                schedule_time, schedule_day = hkt_to_utc_schedule(
+                    "monthly", self.new_job_schedule_time, day_val
+                )
         except ValueError as e:
             logging.exception(f"Invalid schedule configuration: {e}")
             return rx.window_alert(f"Invalid configuration: {e}")
