@@ -26,7 +26,8 @@
 - [x] Update formatted_interval to show schedule description
 
 ## Phase 4: Database Fix & Push to GitHub ✅
-- [x] Fix database schema error (deleted old database, recreated with new columns)
+- [x] Delete old SQLite database to recreate with new schema
+- [x] Verify new schema has schedule_type, schedule_time, schedule_day columns
 - [x] Push app/models.py - Calendar scheduling fields
 - [x] Push app/state.py - Calendar scheduling UI state
 - [x] Push app/worker.py - Calendar-based next_run calculations
@@ -34,13 +35,12 @@
 - [x] Push app/app.py - Main application entry
 - [x] Push requirements.txt - Added python-dateutil
 - [x] Push plan.md - Updated project plan
-- [x] Verify repository updated at https://github.com/orkapodavid/job-trigger-portal
 
 ---
 
 ## Implementation Complete! 🎉
 
-### Files Updated:
+### Files Updated on GitHub:
 1. **app/models.py** - Added `schedule_type`, `schedule_time`, `schedule_day` columns
 2. **app/state.py** - Added form state for all schedule types, formatted_interval display
 3. **app/worker.py** - Calendar-based `calculate_next_run()` using python-dateutil
