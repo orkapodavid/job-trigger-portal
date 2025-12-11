@@ -5,7 +5,7 @@ from app.models import ScheduledJob, JobExecutionLog
 
 def format_datetime(date_val: rx.Var) -> rx.Component:
     """Format a datetime value to a readable string using rx.moment."""
-    return rx.moment(date_val, format="YYYY-MM-DD HH:mm")
+    return rx.moment(date_val, format="YYYY-MM-DD HH:mm", tz="Asia/Hong_Kong")
 
 
 def format_interval(job: dict) -> rx.Component:
@@ -175,7 +175,7 @@ def create_job_modal() -> rx.Component:
                             "daily",
                             rx.el.div(
                                 rx.el.label(
-                                    "Time (UTC)",
+                                    "Time (HKT)",
                                     class_name="block text-sm font-medium text-gray-700 mb-1",
                                 ),
                                 rx.el.input(
@@ -192,7 +192,7 @@ def create_job_modal() -> rx.Component:
                                 rx.el.div(
                                     rx.el.div(
                                         rx.el.label(
-                                            "Day of Week",
+                                            "Day of Week (HKT)",
                                             class_name="block text-sm font-medium text-gray-700 mb-1",
                                         ),
                                         rx.el.select(
@@ -210,7 +210,7 @@ def create_job_modal() -> rx.Component:
                                     ),
                                     rx.el.div(
                                         rx.el.label(
-                                            "Time (UTC)",
+                                            "Time (HKT)",
                                             class_name="block text-sm font-medium text-gray-700 mb-1",
                                         ),
                                         rx.el.input(
@@ -230,7 +230,7 @@ def create_job_modal() -> rx.Component:
                                 rx.el.div(
                                     rx.el.div(
                                         rx.el.label(
-                                            "Day of Month (1-31)",
+                                            "Day of Month (HKT)",
                                             class_name="block text-sm font-medium text-gray-700 mb-1",
                                         ),
                                         rx.el.input(
@@ -244,7 +244,7 @@ def create_job_modal() -> rx.Component:
                                     ),
                                     rx.el.div(
                                         rx.el.label(
-                                            "Time (UTC)",
+                                            "Time (HKT)",
                                             class_name="block text-sm font-medium text-gray-700 mb-1",
                                         ),
                                         rx.el.input(
@@ -362,8 +362,16 @@ def jobs_table() -> rx.Component:
                 rx.el.h2(
                     "Scheduled Jobs", class_name="text-lg font-semibold text-gray-900"
                 ),
-                rx.el.p(
-                    "Manage your automated tasks", class_name="text-sm text-gray-500"
+                rx.el.div(
+                    rx.el.p(
+                        "Manage your automated tasks",
+                        class_name="text-sm text-gray-500",
+                    ),
+                    rx.el.span(
+                        "Hong Kong Time (UTC+8)",
+                        class_name="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800",
+                    ),
+                    class_name="flex items-center",
                 ),
                 class_name="flex flex-col",
             ),
@@ -482,7 +490,7 @@ def log_detail_view() -> rx.Component:
                         class_name="text-xs font-medium text-gray-500 mr-2",
                     ),
                     rx.el.span(
-                        State.selected_log_entry.run_time.to_string(),
+                        format_datetime(State.selected_log_entry.run_time),
                         class_name="text-sm text-gray-800",
                     ),
                     class_name="mb-4 flex items-center",
@@ -514,7 +522,9 @@ def log_item(log: JobExecutionLog) -> rx.Component:
     return rx.el.div(
         rx.el.div(
             log_status_badge(log.status),
-            rx.el.span(log.run_time.to_string(), class_name="text-xs text-gray-500"),
+            rx.el.span(
+                format_datetime(log.run_time), class_name="text-xs text-gray-500"
+            ),
             class_name="flex justify-between items-center w-full mb-1",
         ),
         rx.el.div(
