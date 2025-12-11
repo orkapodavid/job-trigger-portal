@@ -31,6 +31,7 @@
 - [x] Push app/state.py - Calendar scheduling UI state
 - [x] Push app/worker.py - Calendar-based next_run calculations
 - [x] Push app/job_manager.py - Dynamic schedule type forms
+- [x] Push app/app.py - Main application entry
 - [x] Push requirements.txt - Added python-dateutil
 - [x] Push plan.md - Updated project plan
 - [x] Verify repository updated at https://github.com/orkapodavid/job-trigger-portal
@@ -44,7 +45,9 @@
 2. **app/state.py** - Added form state for all schedule types, formatted_interval display
 3. **app/worker.py** - Calendar-based `calculate_next_run()` using python-dateutil
 4. **app/job_manager.py** - Dynamic form fields based on schedule type selection
-5. **requirements.txt** - Added python-dateutil dependency
+5. **app/app.py** - Main application entry point
+6. **requirements.txt** - Added python-dateutil dependency
+7. **plan.md** - Updated project plan
 
 ### Schedule Types Supported:
 - **Interval**: Run every N seconds/minutes/hours/days
