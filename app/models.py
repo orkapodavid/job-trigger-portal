@@ -28,6 +28,9 @@ class ScheduledJob(SQLModel, table=True):
     name: str = Field(index=True, nullable=False)
     script_path: str = Field(nullable=False)
     interval_seconds: int = Field(nullable=False)
+    schedule_type: str = Field(default="interval", nullable=False)
+    schedule_time: Optional[str] = Field(default=None, nullable=True)
+    schedule_day: Optional[int] = Field(default=None, nullable=True)
     is_active: bool = Field(default=True, nullable=False)
     next_run: Optional[datetime] = Field(
         default=None, sa_column_kwargs={"nullable": True}
