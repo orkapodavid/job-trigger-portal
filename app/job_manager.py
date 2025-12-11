@@ -107,30 +107,160 @@ def create_job_modal() -> rx.Component:
                 ),
                 rx.el.div(
                     rx.el.label(
-                        "Run Every",
+                        "Schedule Type",
                         class_name="block text-sm font-medium text-gray-700 mb-1",
                     ),
-                    rx.el.div(
-                        rx.el.input(
-                            on_change=State.set_new_job_interval_value,
-                            type="number",
-                            min="1",
-                            placeholder="1",
-                            class_name="flex-1 rounded-l-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:z-10",
-                            default_value=State.new_job_interval_value,
-                        ),
-                        rx.el.select(
-                            rx.el.option("Seconds", value="Seconds"),
-                            rx.el.option("Minutes", value="Minutes"),
-                            rx.el.option("Hours", value="Hours"),
-                            rx.el.option("Days", value="Days"),
-                            value=State.new_job_interval_unit,
-                            on_change=State.set_new_job_interval_unit,
-                            class_name="w-32 rounded-r-md border-l-0 border border-gray-300 px-3 py-2 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:z-10",
-                        ),
-                        class_name="flex rounded-md shadow-sm",
+                    rx.el.select(
+                        rx.el.option("Interval (Simple)", value="interval"),
+                        rx.el.option("Hourly", value="hourly"),
+                        rx.el.option("Daily", value="daily"),
+                        rx.el.option("Weekly", value="weekly"),
+                        rx.el.option("Monthly", value="monthly"),
+                        value=State.new_job_schedule_type,
+                        on_change=State.set_new_job_schedule_type,
+                        class_name="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent",
                     ),
-                    class_name="mb-6",
+                    class_name="mb-4",
+                ),
+                rx.el.div(
+                    rx.match(
+                        State.new_job_schedule_type,
+                        (
+                            "interval",
+                            rx.el.div(
+                                rx.el.label(
+                                    "Run Every",
+                                    class_name="block text-sm font-medium text-gray-700 mb-1",
+                                ),
+                                rx.el.div(
+                                    rx.el.input(
+                                        on_change=State.set_new_job_interval_value,
+                                        type="number",
+                                        min="1",
+                                        placeholder="1",
+                                        class_name="flex-1 rounded-l-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:z-10",
+                                        default_value=State.new_job_interval_value,
+                                    ),
+                                    rx.el.select(
+                                        rx.el.option("Seconds", value="Seconds"),
+                                        rx.el.option("Minutes", value="Minutes"),
+                                        rx.el.option("Hours", value="Hours"),
+                                        rx.el.option("Days", value="Days"),
+                                        value=State.new_job_interval_unit,
+                                        on_change=State.set_new_job_interval_unit,
+                                        class_name="w-32 rounded-r-md border-l-0 border border-gray-300 px-3 py-2 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:z-10",
+                                    ),
+                                    class_name="flex rounded-md shadow-sm",
+                                ),
+                            ),
+                        ),
+                        (
+                            "hourly",
+                            rx.el.div(
+                                rx.el.label(
+                                    "Run at Minute (0-59)",
+                                    class_name="block text-sm font-medium text-gray-700 mb-1",
+                                ),
+                                rx.el.input(
+                                    type="number",
+                                    min="0",
+                                    max="59",
+                                    on_change=State.set_new_job_schedule_minute,
+                                    class_name="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent",
+                                    default_value=State.new_job_schedule_minute,
+                                ),
+                            ),
+                        ),
+                        (
+                            "daily",
+                            rx.el.div(
+                                rx.el.label(
+                                    "Time (UTC)",
+                                    class_name="block text-sm font-medium text-gray-700 mb-1",
+                                ),
+                                rx.el.input(
+                                    type="time",
+                                    on_change=State.set_new_job_schedule_time,
+                                    class_name="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent",
+                                    default_value=State.new_job_schedule_time,
+                                ),
+                            ),
+                        ),
+                        (
+                            "weekly",
+                            rx.el.div(
+                                rx.el.div(
+                                    rx.el.div(
+                                        rx.el.label(
+                                            "Day of Week",
+                                            class_name="block text-sm font-medium text-gray-700 mb-1",
+                                        ),
+                                        rx.el.select(
+                                            rx.el.option("Monday", value="0"),
+                                            rx.el.option("Tuesday", value="1"),
+                                            rx.el.option("Wednesday", value="2"),
+                                            rx.el.option("Thursday", value="3"),
+                                            rx.el.option("Friday", value="4"),
+                                            rx.el.option("Saturday", value="5"),
+                                            rx.el.option("Sunday", value="6"),
+                                            value=State.new_job_schedule_day,
+                                            on_change=State.set_new_job_schedule_day,
+                                            class_name="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent",
+                                        ),
+                                    ),
+                                    rx.el.div(
+                                        rx.el.label(
+                                            "Time (UTC)",
+                                            class_name="block text-sm font-medium text-gray-700 mb-1",
+                                        ),
+                                        rx.el.input(
+                                            type="time",
+                                            on_change=State.set_new_job_schedule_time,
+                                            class_name="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent",
+                                            default_value=State.new_job_schedule_time,
+                                        ),
+                                    ),
+                                    class_name="grid grid-cols-2 gap-4",
+                                )
+                            ),
+                        ),
+                        (
+                            "monthly",
+                            rx.el.div(
+                                rx.el.div(
+                                    rx.el.div(
+                                        rx.el.label(
+                                            "Day of Month (1-31)",
+                                            class_name="block text-sm font-medium text-gray-700 mb-1",
+                                        ),
+                                        rx.el.input(
+                                            type="number",
+                                            min="1",
+                                            max="31",
+                                            on_change=State.set_new_job_schedule_day,
+                                            class_name="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent",
+                                            default_value=State.new_job_schedule_day,
+                                        ),
+                                    ),
+                                    rx.el.div(
+                                        rx.el.label(
+                                            "Time (UTC)",
+                                            class_name="block text-sm font-medium text-gray-700 mb-1",
+                                        ),
+                                        rx.el.input(
+                                            type="time",
+                                            on_change=State.set_new_job_schedule_time,
+                                            class_name="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent",
+                                            default_value=State.new_job_schedule_time,
+                                        ),
+                                    ),
+                                    class_name="grid grid-cols-2 gap-4",
+                                )
+                            ),
+                        ),
+                        rx.el.div(),
+                    ),
+                    class_name="mb-6 min-h-[80px]",
                 ),
                 rx.el.div(
                     rx.radix.primitives.dialog.close(
