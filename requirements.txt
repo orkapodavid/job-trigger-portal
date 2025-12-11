@@ -2,3 +2,4 @@ sqlmodel
 pyodbc
 reflex
 PyGithub
+python-dateutil
