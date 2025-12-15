@@ -49,11 +49,11 @@ def hkt_to_utc_schedule(schedule_type: str, time_str: str, day_val: Optional[int
         h, m = map(int, time_str.split(":"))
         dt_hkt = None
         if schedule_type == "daily":
-            dt_hkt = datetime(2024, 1, 1, h, m, 0, tzinfo=HKT)
+            dt_hkt = HKT.localize(datetime(2024, 1, 1, h, m, 0))
         elif schedule_type == "weekly":
-            dt_hkt = datetime(2024, 1, 1 + (day_val or 0), h, m, 0, tzinfo=HKT)
+            dt_hkt = HKT.localize(datetime(2024, 1, 1 + (day_val or 0), h, m, 0))
         elif schedule_type == "monthly":
-            dt_hkt = datetime(2024, 1, day_val or 1, h, m, 0, tzinfo=HKT)
+            dt_hkt = HKT.localize(datetime(2024, 1, day_val or 1, h, m, 0))
         else:
             return (time_str, day_val)
         dt_utc = dt_hkt.astimezone(timezone.utc)
