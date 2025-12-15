@@ -59,6 +59,9 @@ BEGIN
         name NVARCHAR(255) NOT NULL,
         script_path NVARCHAR(1024) NOT NULL,
         interval_seconds INT NOT NULL,
+        schedule_type NVARCHAR(50) NOT NULL DEFAULT 'interval',
+        schedule_time NVARCHAR(10) NULL,
+        schedule_day INT NULL,
         is_active BIT NOT NULL DEFAULT 1,
         next_run DATETIME2 NULL
     );
@@ -134,9 +137,12 @@ The T-SQL script above was derived from `app/models.py`. If you modify the Pytho
 | `id: Optional[int]`           | `INT IDENTITY(1,1)`         | Primary Key |
 | `name: str`                   | `NVARCHAR(255)`             | Indexed |
 | `script_path: str`            | `NVARCHAR(1024)`            | |
-| `interval_seconds: int`       | `INT`                       | |
+| `interval_seconds: int`       | `INT`                       | Used for 'interval' type |
+| `schedule_type: str`          | `NVARCHAR(50)`              | e.g. daily, weekly, manual |
+| `schedule_time: str`          | `NVARCHAR(10)`              | HH:MM format |
+| `schedule_day: int`           | `INT`                       | 0-6 (Mon-Sun) or 1-31 |
 | `is_active: bool`             | `BIT`                       | 0=False, 1=True |
-| `next_run: datetime`          | `DATETIME2`                 | |
+| `next_run: datetime`          | `DATETIME2`                 | UTC Timestamp |
 
 | Python Model (`JobExecutionLog`) | SQL Type (`job_execution_logs`) | Notes |
 |----------------------------------|---------------------------------|-------|
