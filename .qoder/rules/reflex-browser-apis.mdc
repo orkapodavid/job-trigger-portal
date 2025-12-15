@@ -1,0 +1,672 @@
+---
+description: Expert guidance for Reflex Browser APIs - Browser Storage (Cookie, LocalStorage, SessionStorage), JavaScript execution, and client-side operations
+globs: ["**/*.py"]
+---
+
+# You are an expert in Reflex Browser APIs and client-side interactions
+
+## Core Principles
+
+- Browser storage provides persistent state on the client side
+- Cookies sync with server, LocalStorage persists indefinitely, SessionStorage is per-tab
+- Execute custom JavaScript with rx.script and rx.call_script
+- Use browser storage for authentication, preferences, and temporary data
+- Avoid custom JavaScript when possible - use Reflex's Python API
+
+## Browser Storage
+
+### rx.Cookie
+
+State var stored as browser cookie.
+
+**Basic Usage**
+```python
+import reflex as rx
+
+class State(rx.State):
+    # Cookie vars
+    auth_token: str = rx.Cookie("")
+    user_id: str = rx.Cookie("")
+    preferences: str = rx.Cookie("default")
+    
+    def login(self, token: str, user_id: str):
+        """Set cookies on login"""
+        self.auth_token = token
+        self.user_id = user_id
+    
+    def logout(self):
+        """Clear cookies on logout"""
+        return [
+            rx.remove_cookie("auth_token"),
+            rx.remove_cookie("user_id"),
+        ]
+```
+
+**Cookie Configuration**
+```python
+class State(rx.State):
+    # Basic cookie
+    simple: str = rx.Cookie("")
+    
+    # Cookie with path
+    app_cookie: str = rx.Cookie(
+        "",
+        name="app_data",
+        path="/",  # Accessible on all pages
+    )
+    
+    # Cookie with expiration
+    session_cookie: str = rx.Cookie(
+        "",
+        name="session",
+        max_age=3600,  # 1 hour in seconds
+    )
+    
+    # Cookie for subdomain
+    domain_cookie: str = rx.Cookie(
+        "",
+        name="shared",
+        domain=".example.com",  # Shared across subdomains
+    )
+    
+    # Secure cookie (HTTPS only)
+    secure_cookie: str = rx.Cookie(
+        "",
+        name="secure_data",
+        secure=True,  # HTTPS only
+        same_site="strict",  # CSRF protection
+    )
+```
+
+**Cookie Parameters**
+- `name`: Cookie name on client side
+- `path`: Cookie path (default: `/`)
+- `max_age`: Expiration in seconds from when client receives it
+- `domain`: Cookie domain (e.g., `.example.com`)
+- `secure`: HTTPS only (default: `False`)
+- `same_site`: `True`, `False`, `None`, `"lax"`, `"strict"`
+
+**Important Notes**
+- Default cookie value is NEVER set in browser
+- Two separate states should NOT use same cookie name
+- Cookies are sent with HTTP requests (accessible server-side)
+
+### rx.LocalStorage
+
+State var stored in browser's localStorage.
+
+**Basic Usage**
+```python
+class State(rx.State):
+    # LocalStorage vars
+    theme: str = rx.LocalStorage("light")
+    sidebar_open: bool = rx.LocalStorage(True)
+    user_settings: str = rx.LocalStorage("{}")
+    
+    def toggle_theme(self):
+        """Toggle and persist theme"""
+        self.theme = "dark" if self.theme == "light" else "light"
+    
+    def toggle_sidebar(self):
+        """Persist sidebar state"""
+        self.sidebar_open = not self.sidebar_open
+```
+
+**LocalStorage with Sync**
+```python
+class State(rx.State):
+    # Synced across tabs
+    counter: str = rx.LocalStorage(
+        "0",
+        name="shared_counter",
+        sync=True,  # Updates propagate to other tabs
+    )
+    
+    # Not synced (default)
+    local_data: str = rx.LocalStorage(
+        "",
+        name="local_only",
+        sync=False,  # No cross-tab sync
+    )
+    
+    def increment(self):
+        """Increment syncs to all tabs"""
+        current = int(self.counter)
+        self.counter = str(current + 1)
+```
+
+**LocalStorage Parameters**
+- `name`: Storage key name
+- `sync`: Sync across tabs (default: `False`)
+
+**Characteristics**
+- Persists indefinitely until explicitly deleted
+- ~5MB storage limit
+- Shared across all tabs of same origin
+- Client-side only (not sent with requests)
+- Sync parameter enables active cross-tab propagation
+
+**Removing LocalStorage**
+```python
+class State(rx.State):
+    
+    def clear_settings(self):
+        """Remove specific item"""
+        return rx.remove_local_storage("user_settings")
+    
+    def clear_all(self):
+        """Clear all localStorage"""
+        return rx.clear_local_storage()
+```
+
+### rx.SessionStorage
+
+State var stored in browser's sessionStorage.
+
+**Basic Usage**
+```python
+class State(rx.State):
+    # Session-specific data
+    wizard_step: str = rx.SessionStorage("1")
+    form_draft: str = rx.SessionStorage("")
+    temp_data: str = rx.SessionStorage("[]")
+    
+    def next_step(self):
+        """Navigate wizard steps"""
+        current = int(self.wizard_step)
+        self.wizard_step = str(current + 1)
+    
+    def save_draft(self, data: str):
+        """Save temporary form data"""
+        self.form_draft = data
+```
+
+**SessionStorage Configuration**
+```python
+class State(rx.State):
+    # Basic session storage
+    session_id: str = rx.SessionStorage(
+        "",
+        name="current_session",
+    )
+    
+    # Multi-step form data
+    checkout_data: str = rx.SessionStorage(
+        "{}",
+        name="checkout_form",
+    )
+```
+
+**Characteristics**
+- Cleared when tab/browser closes
+- ~5MB storage limit
+- Isolated to specific tab/window
+- Survives page refreshes
+- NOT shared with other tabs
+
+**Removing SessionStorage**
+```python
+class State(rx.State):
+    
+    def clear_session(self):
+        """Remove specific item"""
+        return rx.remove_session_storage("session_id")
+    
+    def clear_all_session(self):
+        """Clear all sessionStorage"""
+        return rx.clear_session_storage()
+```
+
+## Storage Comparison
+
+| Feature | Cookie | LocalStorage | SessionStorage |
+|---------|--------|--------------|----------------|
+| Persistence | Until expires | Until deleted | Until tab closes |
+| Storage Limit | ~4KB | ~5MB | ~5MB |
+| Sent with Requests | Yes | No | No |
+| Accessibility | Server & Client | Client Only | Client Only |
+| Expiration | Configurable | Never | End of session |
+| Scope | Domain/Path | Origin | Tab/Window |
+| Cross-tab Sync | No | Yes (with sync=True) | No |
+
+## When to Use Each Storage Type
+
+**Use rx.Cookie When:**
+- Authentication tokens (need server access)
+- User session data
+- Data needs server-side validation
+- Cross-domain sharing needed
+- Small data (<4KB)
+
+**Use rx.LocalStorage When:**
+- User preferences (theme, language)
+- App state persistence
+- Larger data storage (~5MB)
+- Data should persist indefinitely
+- Cross-tab synchronization needed
+
+**Use rx.SessionStorage When:**
+- Temporary session data
+- Multi-step form data
+- Shopping cart (per-tab)
+- Wizard/flow state
+- Data isolated to single tab
+- Sensitive data (cleared on close)
+
+## Complex Storage Patterns
+
+### Serialization with Pydantic
+
+```python
+from pydantic import BaseModel
+import json
+
+class UserSettings(BaseModel):
+    theme: str = "light"
+    language: str = "en"
+    notifications: bool = True
+
+class State(rx.State):
+    # Serialize Pydantic model to storage
+    settings_json: str = rx.LocalStorage(
+        UserSettings().model_dump_json()
+    )
+    
+    @rx.var
+    def settings(self) -> UserSettings:
+        """Deserialize from storage"""
+        try:
+            return UserSettings.model_validate_json(self.settings_json)
+        except:
+            return UserSettings()
+    
+    def update_theme(self, theme: str):
+        """Update settings"""
+        settings = self.settings
+        settings.theme = theme
+        self.settings_json = settings.model_dump_json()
+```
+
+### Authentication with Cookies
+
+```python
+class AuthState(rx.State):
+    # Store auth token in cookie
+    auth_token: str = rx.Cookie(
+        "",
+        name="auth_token",
+        path="/",
+        max_age=86400,  # 24 hours
+        secure=True,
+        same_site="strict",
+    )
+    
+    # Store user data in localStorage
+    user_data_json: str = rx.LocalStorage("{}")
+    
+    @rx.var
+    def is_authenticated(self) -> bool:
+        """Check if user is logged in"""
+        return self.auth_token != ""
+    
+    async def login(self, username: str, password: str):
+        """Login and store credentials"""
+        # Authenticate with backend
+        token = await authenticate(username, password)
+        
+        if token:
+            self.auth_token = token
+            self.user_data_json = json.dumps({
+                "username": username,
+                "login_time": datetime.now().isoformat(),
+            })
+            return rx.redirect("/dashboard")
+        
+        return rx.toast.error("Login failed")
+    
+    def logout(self):
+        """Clear authentication"""
+        return [
+            rx.remove_cookie("auth_token"),
+            rx.remove_local_storage("user_data_json"),
+            rx.redirect("/login"),
+        ]
+```
+
+### Multi-Step Form with SessionStorage
+
+```python
+class FormState(rx.State):
+    # Store form data per step
+    step_1_data: str = rx.SessionStorage("{}")
+    step_2_data: str = rx.SessionStorage("{}")
+    step_3_data: str = rx.SessionStorage("{}")
+    current_step: int = 1
+    
+    def save_step_1(self, data: dict):
+        """Save step 1 data"""
+        self.step_1_data = json.dumps(data)
+        self.current_step = 2
+    
+    def save_step_2(self, data: dict):
+        """Save step 2 data"""
+        self.step_2_data = json.dumps(data)
+        self.current_step = 3
+    
+    async def submit_form(self, data: dict):
+        """Submit complete form"""
+        self.step_3_data = json.dumps(data)
+        
+        # Combine all steps
+        form_data = {
+            "step1": json.loads(self.step_1_data),
+            "step2": json.loads(self.step_2_data),
+            "step3": json.loads(self.step_3_data),
+        }
+        
+        # Submit to backend
+        await submit_to_api(form_data)
+        
+        # Clear session storage
+        return [
+            rx.remove_session_storage("step_1_data"),
+            rx.remove_session_storage("step_2_data"),
+            rx.remove_session_storage("step_3_data"),
+            rx.toast.success("Form submitted!"),
+            rx.redirect("/success"),
+        ]
+```
+
+## Browser JavaScript
+
+Execute custom JavaScript in the browser.
+
+### rx.script
+
+Inject JavaScript via next/script for efficient loading.
+
+**Inline Scripts**
+```python
+# Add script to page
+def page():
+    return rx.fragment(
+        rx.script("""
+            function playAudio() {
+                const audio = new Audio('/assets/sound.mp3');
+                audio.play();
+            }
+        """),
+        rx.button("Play Sound", on_click=rx.call_script("playAudio()")),
+    )
+```
+
+**External Scripts**
+```python
+# Load from CDN
+def page():
+    return rx.fragment(
+        rx.script(src="https://cdn.example.com/library.js"),
+        rx.button("Use Library", on_click=rx.call_script("libraryFunction()")),
+    )
+
+# Load from assets
+def page():
+    return rx.fragment(
+        rx.script(src="/custom.js"),
+        # Use functions from custom.js
+    )
+```
+
+**Global Scripts**
+```python
+# Add to all pages
+app = rx.App(
+    head_components=[
+        rx.script("""
+            console.log('App initialized');
+            window.appGlobals = { version: '1.0' };
+        """),
+    ],
+)
+```
+
+### rx.call_script
+
+Execute JavaScript and optionally return results.
+
+**Simple Execution**
+```python
+class State(rx.State):
+    
+    def play_sound(self):
+        """Execute JavaScript"""
+        return rx.call_script("new Audio('/sound.mp3').play()")
+    
+    def log_message(self, msg: str):
+        """Execute with parameter"""
+        return rx.call_script(f"console.log('{msg}')")
+```
+
+**With Callback**
+```python
+class State(rx.State):
+    scroll_position: int = 0
+    window_width: int = 0
+    location: dict = {}
+    
+    def get_scroll_position(self, position: int):
+        """Callback receives result"""
+        self.scroll_position = position
+    
+    def update_scroll(self):
+        """Get scroll position"""
+        return rx.call_script(
+            "window.scrollY",
+            callback=State.get_scroll_position,
+        )
+    
+    def get_window_size(self, width: int):
+        self.window_width = width
+    
+    def update_window_size(self):
+        """Get window dimensions"""
+        return rx.call_script(
+            "window.innerWidth",
+            callback=State.get_window_size,
+        )
+    
+    def get_location(self, location: dict):
+        self.location = location
+    
+    def update_location(self):
+        """Get window.location object"""
+        return rx.call_script(
+            """({
+                href: window.location.href,
+                pathname: window.location.pathname,
+                search: window.location.search,
+            })""",
+            callback=State.get_location,
+        )
+```
+
+**Allowed Callback Values**
+- Primitives: `str`, `int`, `float`, `bool`
+- Collections: `dict`, `list`
+- Complex JSON objects
+
+### React Hooks
+
+Use React hooks in custom components.
+
+**Using Hooks**
+```python
+class CustomComponent(rx.Component):
+    
+    def add_hooks(self) -> list[str]:
+        """Add React hooks"""
+        return [
+            # useState
+            "const [count, setCount] = useState(0);",
+            
+            # useEffect
+            """
+            useEffect(() => {
+                console.log('Component mounted');
+                return () => console.log('Component unmounted');
+            }, []);
+            """,
+            
+            # useRef
+            "const inputRef = useRef(null);",
+            
+            # Custom hooks
+            "const windowSize = useWindowSize();",
+        ]
+    
+    def add_custom_code(self) -> list[str]:
+        """Add supporting code"""
+        return [
+            """
+            function useWindowSize() {
+                const [size, setSize] = useState({ width: 0, height: 0 });
+                
+                useEffect(() => {
+                    const updateSize = () => {
+                        setSize({ 
+                            width: window.innerWidth, 
+                            height: window.innerHeight 
+                        });
+                    };
+                    
+                    window.addEventListener('resize', updateSize);
+                    updateSize();
+                    
+                    return () => window.removeEventListener('resize', updateSize);
+                }, []);
+                
+                return size;
+            }
+            """
+        ]
+```
+
+**Global Hotkeys Example**
+```python
+class GlobalHotkeys(rx.Fragment):
+    """Component with keyboard shortcuts"""
+    
+    def add_hooks(self) -> list[str]:
+        return [
+            """
+            useEffect(() => {
+                const handleKeyPress = (e) => {
+                    if (e.key === 'a') {
+                        console.log('A pressed');
+                    }
+                };
+                
+                document.addEventListener('keydown', handleKeyPress);
+                return () => document.removeEventListener('keydown', handleKeyPress);
+            }, []);
+            """
+        ]
+
+class State(rx.State):
+    last_key: str = ""
+    
+    def handle_hotkey(self, key: str):
+        self.last_key = key
+
+def page():
+    return rx.fragment(
+        GlobalHotkeys.create(),
+        rx.text(f"Last key: {State.last_key}"),
+    )
+```
+
+## Best Practices
+
+### Storage Security
+
+```python
+class SecureState(rx.State):
+    # Never store sensitive data in localStorage/sessionStorage
+    # Use secure cookies for tokens
+    auth_token: str = rx.Cookie(
+        "",
+        secure=True,  # HTTPS only
+        same_site="strict",  # CSRF protection
+        path="/",
+    )
+    
+    # OK for localStorage - non-sensitive preferences
+    theme: str = rx.LocalStorage("light")
+    language: str = rx.LocalStorage("en")
+```
+
+### Error Handling
+
+```python
+class RobustState(rx.State):
+    settings_json: str = rx.LocalStorage("{}")
+    
+    @rx.var
+    def settings(self) -> dict:
+        """Safely parse JSON"""
+        try:
+            return json.loads(self.settings_json)
+        except json.JSONDecodeError:
+            # Return default on error
+            return {"theme": "light", "lang": "en"}
+    
+    def update_setting(self, key: str, value: str):
+        """Update with error handling"""
+        try:
+            settings = self.settings
+            settings[key] = value
+            self.settings_json = json.dumps(settings)
+        except Exception as e:
+            return rx.toast.error(f"Failed to save: {e}")
+```
+
+### Avoid Custom JavaScript
+
+```python
+# ❌ Bad - unnecessary JavaScript
+class State(rx.State):
+    def bad_redirect(self):
+        return rx.call_script("window.location.href = '/dashboard'")
+
+# ✅ Good - use Reflex API
+class State(rx.State):
+    def good_redirect(self):
+        return rx.redirect("/dashboard")
+
+# ❌ Bad - custom storage access
+class State(rx.State):
+    def bad_storage(self):
+        return rx.call_script("localStorage.setItem('key', 'value')")
+
+# ✅ Good - use rx.LocalStorage
+class State(rx.State):
+    key: str = rx.LocalStorage("value")
+```
+
+### Performance
+
+```python
+class OptimizedState(rx.State):
+    # Cache expensive computations
+    large_data: str = rx.LocalStorage("[]")
+    
+    @rx.var(cache=True)
+    def parsed_data(self) -> list:
+        """Parse once, cache result"""
+        return json.loads(self.large_data)
+    
+    @rx.var(cache=True)
+    def filtered_data(self) -> list:
+        """Chain cached vars"""
+        return [item for item in self.parsed_data if item["active"]]
+```

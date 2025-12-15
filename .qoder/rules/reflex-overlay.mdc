@@ -1,0 +1,886 @@
+---
+description: Expert guide for Reflex Overlay components including Dialog, Alert Dialog, Popover, Tooltip, Dropdown Menu, Context Menu, Hover Card, Drawer, and Toast
+globs:
+  - "**/*.py"
+---
+
+# Reflex Overlay Components Expert
+
+You are an expert in Reflex's Overlay components, specializing in creating modal dialogs, popovers, tooltips, menus, and notifications that enhance user interaction.
+
+## Core Overlay Components
+
+### Dialog Component (`rx.dialog`)
+
+**Purpose**: Modal dialog for user interaction requiring focus
+
+**Structure**:
+- `rx.dialog.root`: Container with open state control
+- `rx.dialog.trigger`: Element that opens the dialog
+- `rx.dialog.content`: Dialog content container
+- `rx.dialog.title`: Dialog title (announced for accessibility)
+- `rx.dialog.description`: Dialog description (announced for accessibility)
+- `rx.dialog.close`: Element that closes the dialog
+
+**Key Properties**:
+- `open`: Controlled open state (bool)
+- `on_open_change`: Event handler for open state changes
+- `size`: "1" | "2" | "3" | "4" (content size)
+
+**Best Practices**:
+
+#### Basic Dialog
+```python
+rx.dialog.root(
+    rx.dialog.trigger(
+        rx.button("Open Dialog")
+    ),
+    rx.dialog.content(
+        rx.dialog.title("Dialog Title"),
+        rx.dialog.description("Dialog description goes here."),
+        rx.vstack(
+            # Dialog content
+            rx.text("Additional content"),
+            rx.hstack(
+                rx.dialog.close(
+                    rx.button("Cancel", variant="soft")
+                ),
+                rx.dialog.close(
+                    rx.button("Confirm")
+                ),
+                spacing="2"
+            ),
+            spacing="3"
+        )
+    )
+)
+```
+
+#### Controlled Dialog with State
+```python
+class DialogState(rx.State):
+    dialog_open: bool = False
+    open_count: int = 0
+    
+    def toggle_dialog(self, is_open: bool):
+        self.dialog_open = is_open
+        if is_open:
+            self.open_count += 1
+
+rx.vstack(
+    rx.text(f"Dialog opened {DialogState.open_count} times"),
+    rx.text(f"Dialog open: {DialogState.dialog_open}"),
+    rx.dialog.root(
+        rx.dialog.trigger(
+            rx.button("Open Dialog")
+        ),
+        rx.dialog.content(
+            rx.dialog.title("Controlled Dialog"),
+            rx.dialog.description("This dialog's state is tracked."),
+            rx.dialog.close(
+                rx.button("Close")
+            )
+        ),
+        open=DialogState.dialog_open,
+        on_open_change=DialogState.toggle_dialog
+    ),
+    spacing="3"
+)
+```
+
+#### Form Submission Dialog
+```python
+class UserFormState(rx.State):
+    users: list[dict] = []
+    
+    def add_user(self, form_data: dict):
+        # Check if email exists
+        if any(u["email"] == form_data["email"] for u in self.users):
+            return rx.window_alert("Email already exists!")
+        self.users.append(form_data)
+
+rx.dialog.root(
+    rx.dialog.trigger(
+        rx.button("Add User", variant="solid")
+    ),
+    rx.dialog.content(
+        rx.dialog.title("Add New User"),
+        rx.dialog.description("Enter user details below."),
+        rx.form(
+            rx.vstack(
+                rx.input(
+                    placeholder="Name",
+                    name="name",
+                    required=True
+                ),
+                rx.input(
+                    placeholder="Email",
+                    name="email",
+                    type="email",
+                    required=True
+                ),
+                rx.hstack(
+                    rx.dialog.close(
+                        rx.button("Cancel", variant="soft", type="button")
+                    ),
+                    rx.dialog.close(
+                        rx.button("Submit", type="submit")
+                    ),
+                    spacing="2",
+                    justify="end"
+                ),
+                spacing="3",
+                width="100%"
+            ),
+            on_submit=UserFormState.add_user,
+            reset_on_submit=True
+        ),
+        size="3"
+    )
+)
+```
+
+#### Edit Profile Dialog
+```python
+rx.dialog.root(
+    rx.dialog.trigger(
+        rx.button("Edit Profile")
+    ),
+    rx.dialog.content(
+        rx.vstack(
+            rx.dialog.title("Edit Profile"),
+            rx.dialog.description("Make changes to your profile."),
+            rx.vstack(
+                rx.text("Name", weight="bold", size="2"),
+                rx.input(value=State.user_name, on_change=State.set_user_name),
+                rx.text("Email", weight="bold", size="2"),
+                rx.input(value=State.user_email, on_change=State.set_user_email, type="email"),
+                spacing="3",
+                width="100%"
+            ),
+            rx.hstack(
+                rx.dialog.close(
+                    rx.button("Cancel", variant="soft")
+                ),
+                rx.dialog.close(
+                    rx.button("Save", on_click=State.save_profile)
+                ),
+                spacing="2",
+                justify="end"
+            ),
+            spacing="4"
+        ),
+        size="3"
+    )
+)
+```
+
+### Alert Dialog Component (`rx.alert_dialog`)
+
+**Purpose**: Alert that interrupts user workflow requiring explicit action
+
+**Structure**: Similar to dialog but with alert semantics
+- `rx.alert_dialog.root`
+- `rx.alert_dialog.trigger`
+- `rx.alert_dialog.content`
+- `rx.alert_dialog.title`
+- `rx.alert_dialog.description`
+- `rx.alert_dialog.action`
+- `rx.alert_dialog.cancel`
+
+**Best Practices**:
+
+#### Destructive Action Confirmation
+```python
+rx.alert_dialog.root(
+    rx.alert_dialog.trigger(
+        rx.button("Delete Account", color_scheme="red")
+    ),
+    rx.alert_dialog.content(
+        rx.alert_dialog.title("Delete Account"),
+        rx.alert_dialog.description(
+            "Are you sure? This action cannot be undone. "
+            "This will permanently delete your account and remove your data."
+        ),
+        rx.hstack(
+            rx.alert_dialog.cancel(
+                rx.button("Cancel", variant="soft")
+            ),
+            rx.alert_dialog.action(
+                rx.button(
+                    "Delete",
+                    color_scheme="red",
+                    on_click=State.delete_account
+                )
+            ),
+            spacing="2",
+            justify="end"
+        )
+    )
+)
+```
+
+#### Confirmation with Input
+```python
+class DeleteState(rx.State):
+    confirm_text: str = ""
+    
+    def can_delete(self) -> bool:
+        return self.confirm_text == "DELETE"
+
+rx.alert_dialog.root(
+    rx.alert_dialog.trigger(
+        rx.button("Delete Item", color_scheme="red")
+    ),
+    rx.alert_dialog.content(
+        rx.vstack(
+            rx.alert_dialog.title("Confirm Deletion"),
+            rx.alert_dialog.description(
+                'Type "DELETE" to confirm this action.'
+            ),
+            rx.input(
+                placeholder="Type DELETE",
+                value=DeleteState.confirm_text,
+                on_change=DeleteState.set_confirm_text
+            ),
+            rx.hstack(
+                rx.alert_dialog.cancel(
+                    rx.button("Cancel", variant="soft")
+                ),
+                rx.alert_dialog.action(
+                    rx.button(
+                        "Delete",
+                        color_scheme="red",
+                        disabled=~DeleteState.can_delete,
+                        on_click=DeleteState.perform_delete
+                    )
+                ),
+                spacing="2",
+                justify="end"
+            ),
+            spacing="3",
+            align="start"
+        )
+    )
+)
+```
+
+### Popover Component (`rx.popover`)
+
+**Purpose**: Display rich content in a floating container
+
+**Structure**:
+- `rx.popover.root`
+- `rx.popover.trigger`
+- `rx.popover.content`
+- `rx.popover.close`
+
+**Best Practices**:
+
+#### Information Popover
+```python
+rx.popover.root(
+    rx.popover.trigger(
+        rx.button(
+            rx.icon("info"),
+            variant="ghost",
+            size="1"
+        )
+    ),
+    rx.popover.content(
+        rx.vstack(
+            rx.text("Additional Information", weight="bold"),
+            rx.text("This is detailed information about the feature."),
+            spacing="2"
+        ),
+        max_width="300px"
+    )
+)
+```
+
+#### Settings Popover
+```python
+rx.popover.root(
+    rx.popover.trigger(
+        rx.button(
+            rx.icon("settings"),
+            "Settings"
+        )
+    ),
+    rx.popover.content(
+        rx.vstack(
+            rx.text("Display Settings", weight="bold", size="3"),
+            rx.separator(),
+            rx.hstack(
+                rx.text("Dark Mode"),
+                rx.spacer(),
+                rx.switch(
+                    checked=State.dark_mode,
+                    on_change=State.toggle_dark_mode
+                ),
+                width="100%"
+            ),
+            rx.hstack(
+                rx.text("Notifications"),
+                rx.spacer(),
+                rx.switch(
+                    checked=State.notifications,
+                    on_change=State.toggle_notifications
+                ),
+                width="100%"
+            ),
+            rx.separator(),
+            rx.popover.close(
+                rx.button("Done", width="100%")
+            ),
+            spacing="3",
+            width="250px"
+        )
+    )
+)
+```
+
+#### Color Picker Popover
+```python
+rx.popover.root(
+    rx.popover.trigger(
+        rx.button(
+            rx.box(
+                width="20px",
+                height="20px",
+                background=State.selected_color,
+                border_radius="md"
+            ),
+            "Pick Color"
+        )
+    ),
+    rx.popover.content(
+        rx.vstack(
+            rx.text("Select Color", weight="bold"),
+            rx.grid(
+                rx.foreach(
+                    State.color_options,
+                    lambda color: rx.box(
+                        width="40px",
+                        height="40px",
+                        background=color,
+                        border_radius="md",
+                        cursor="pointer",
+                        on_click=lambda: State.set_color(color)
+                    )
+                ),
+                columns="4",
+                spacing="2"
+            ),
+            spacing="3"
+        )
+    )
+)
+```
+
+### Tooltip Component (`rx.tooltip`)
+
+**Purpose**: Display brief helpful text on hover
+
+**Key Properties**:
+- `content`: Tooltip text/content
+- `side`: "top" | "right" | "bottom" | "left"
+- `delay_duration`: Delay before showing (ms)
+
+**Best Practices**:
+
+#### Simple Tooltip
+```python
+rx.tooltip(
+    rx.button(rx.icon("help-circle")),
+    content="Click for help"
+)
+
+# With custom side
+rx.tooltip(
+    rx.text("Hover me"),
+    content="Tooltip on the right",
+    side="right"
+)
+```
+
+#### Icon Buttons with Tooltips
+```python
+rx.hstack(
+    rx.tooltip(
+        rx.icon_button(rx.icon("save")),
+        content="Save (Ctrl+S)"
+    ),
+    rx.tooltip(
+        rx.icon_button(rx.icon("download")),
+        content="Download file"
+    ),
+    rx.tooltip(
+        rx.icon_button(rx.icon("share")),
+        content="Share with others"
+    ),
+    spacing="2"
+)
+```
+
+#### Rich Tooltip Content
+```python
+rx.tooltip(
+    rx.badge("Premium Feature"),
+    content=rx.vstack(
+        rx.text("Premium Feature", weight="bold"),
+        rx.text("Upgrade to access this feature", size="1"),
+        spacing="1",
+        align="start"
+    )
+)
+```
+
+### Dropdown Menu Component (`rx.dropdown_menu`)
+
+**Purpose**: Display menu of actions or navigation items
+
+**Structure**:
+- `rx.dropdown_menu.root`
+- `rx.dropdown_menu.trigger`
+- `rx.dropdown_menu.content`
+- `rx.dropdown_menu.item`
+- `rx.dropdown_menu.separator`
+- `rx.dropdown_menu.sub` (for submenus)
+
+**Best Practices**:
+
+#### Basic Menu
+```python
+rx.dropdown_menu.root(
+    rx.dropdown_menu.trigger(
+        rx.button(
+            "Actions",
+            rx.icon("chevron-down")
+        )
+    ),
+    rx.dropdown_menu.content(
+        rx.dropdown_menu.item("Edit", on_click=State.edit),
+        rx.dropdown_menu.item("Duplicate", on_click=State.duplicate),
+        rx.dropdown_menu.separator(),
+        rx.dropdown_menu.item(
+            "Delete",
+            color_scheme="red",
+            on_click=State.delete
+        )
+    )
+)
+```
+
+#### User Menu
+```python
+rx.dropdown_menu.root(
+    rx.dropdown_menu.trigger(
+        rx.button(
+            rx.avatar(fallback=State.user_initials, size="2"),
+            variant="ghost"
+        )
+    ),
+    rx.dropdown_menu.content(
+        rx.vstack(
+            rx.text(State.user_name, weight="bold"),
+            rx.text(State.user_email, size="1", color_scheme="gray"),
+            spacing="0",
+            align="start",
+            padding="2"
+        ),
+        rx.dropdown_menu.separator(),
+        rx.dropdown_menu.item(
+            rx.icon("user"),
+            "Profile",
+            on_click=State.go_to_profile
+        ),
+        rx.dropdown_menu.item(
+            rx.icon("settings"),
+            "Settings",
+            on_click=State.go_to_settings
+        ),
+        rx.dropdown_menu.separator(),
+        rx.dropdown_menu.item(
+            rx.icon("log-out"),
+            "Logout",
+            color_scheme="red",
+            on_click=State.logout
+        )
+    )
+)
+```
+
+#### Menu with Submenu
+```python
+rx.dropdown_menu.root(
+    rx.dropdown_menu.trigger(
+        rx.button("File")
+    ),
+    rx.dropdown_menu.content(
+        rx.dropdown_menu.item("New File", shortcut="⌘N"),
+        rx.dropdown_menu.item("Open", shortcut="⌘O"),
+        rx.dropdown_menu.separator(),
+        rx.dropdown_menu.sub(
+            rx.dropdown_menu.sub_trigger("Export"),
+            rx.dropdown_menu.sub_content(
+                rx.dropdown_menu.item("PDF"),
+                rx.dropdown_menu.item("CSV"),
+                rx.dropdown_menu.item("JSON")
+            )
+        ),
+        rx.dropdown_menu.separator(),
+        rx.dropdown_menu.item("Exit", shortcut="⌘Q")
+    )
+)
+```
+
+### Context Menu Component (`rx.context_menu`)
+
+**Purpose**: Right-click context menu
+
+**Structure**: Similar to dropdown menu but triggered by right-click
+- `rx.context_menu.root`
+- `rx.context_menu.trigger`
+- `rx.context_menu.content`
+- `rx.context_menu.item`
+
+**Best Practices**:
+
+#### Table Row Context Menu
+```python
+rx.context_menu.root(
+    rx.context_menu.trigger(
+        rx.table.row(
+            rx.table.cell(item.name),
+            rx.table.cell(item.email)
+        )
+    ),
+    rx.context_menu.content(
+        rx.context_menu.item(
+            rx.icon("edit"),
+            "Edit",
+            on_click=lambda: State.edit_item(item.id)
+        ),
+        rx.context_menu.item(
+            rx.icon("copy"),
+            "Duplicate",
+            on_click=lambda: State.duplicate_item(item.id)
+        ),
+        rx.context_menu.separator(),
+        rx.context_menu.item(
+            rx.icon("trash"),
+            "Delete",
+            color_scheme="red",
+            on_click=lambda: State.delete_item(item.id)
+        )
+    )
+)
+```
+
+#### Card Context Menu
+```python
+rx.context_menu.root(
+    rx.context_menu.trigger(
+        rx.card(
+            rx.vstack(
+                rx.heading(card.title),
+                rx.text(card.description),
+                spacing="2"
+            )
+        )
+    ),
+    rx.context_menu.content(
+        rx.context_menu.item("Open"),
+        rx.context_menu.item("Share"),
+        rx.context_menu.separator(),
+        rx.context_menu.item("Delete", color_scheme="red")
+    )
+)
+```
+
+### Hover Card Component (`rx.hover_card`)
+
+**Purpose**: Display rich preview content on hover
+
+**Structure**:
+- `rx.hover_card.root`
+- `rx.hover_card.trigger`
+- `rx.hover_card.content`
+
+**Best Practices**:
+
+#### User Profile Preview
+```python
+rx.hover_card.root(
+    rx.hover_card.trigger(
+        rx.text(user.name, weight="bold", cursor="pointer")
+    ),
+    rx.hover_card.content(
+        rx.hstack(
+            rx.avatar(src=user.avatar, fallback=user.initials, size="6"),
+            rx.vstack(
+                rx.heading(user.name, size="4"),
+                rx.text(user.bio, size="2"),
+                rx.hstack(
+                    rx.text(f"{user.followers} followers", size="1"),
+                    rx.text(f"{user.following} following", size="1"),
+                    spacing="3"
+                ),
+                spacing="1",
+                align="start"
+            ),
+            spacing="3",
+            align="start"
+        ),
+        max_width="350px"
+    )
+)
+```
+
+#### Link Preview
+```python
+rx.hover_card.root(
+    rx.hover_card.trigger(
+        rx.link("Documentation", href="/docs")
+    ),
+    rx.hover_card.content(
+        rx.vstack(
+            rx.image(src="/doc-preview.png", width="100%"),
+            rx.text("Documentation", weight="bold", size="3"),
+            rx.text("Learn how to use all features", size="2"),
+            spacing="2"
+        ),
+        max_width="300px"
+    )
+)
+```
+
+### Drawer Component (`rx.drawer`)
+
+**Purpose**: Side panel that slides in from screen edge
+
+**Structure**:
+- `rx.drawer.root`
+- `rx.drawer.trigger`
+- `rx.drawer.content`
+- `rx.drawer.title`
+- `rx.drawer.description`
+- `rx.drawer.close`
+
+**Key Properties**:
+- `direction`: "left" | "right" | "top" | "bottom"
+
+**Best Practices**:
+
+#### Navigation Drawer
+```python
+rx.drawer.root(
+    rx.drawer.trigger(
+        rx.button(rx.icon("menu"))
+    ),
+    rx.drawer.content(
+        rx.vstack(
+            rx.drawer.title("Navigation"),
+            rx.drawer.description("App navigation menu"),
+            rx.separator(),
+            rx.vstack(
+                rx.link("Dashboard", href="/"),
+                rx.link("Profile", href="/profile"),
+                rx.link("Settings", href="/settings"),
+                rx.separator(),
+                rx.link("Logout", href="/logout", color_scheme="red"),
+                spacing="3",
+                align="start",
+                width="100%"
+            ),
+            spacing="4",
+            align="start",
+            padding="4"
+        )
+    ),
+    direction="left"
+)
+```
+
+#### Filter Drawer
+```python
+rx.drawer.root(
+    rx.drawer.trigger(
+        rx.button(
+            rx.icon("filter"),
+            "Filters"
+        )
+    ),
+    rx.drawer.content(
+        rx.vstack(
+            rx.drawer.title("Filter Options"),
+            rx.separator(),
+            rx.vstack(
+                rx.text("Category", weight="bold"),
+                rx.select.root(
+                    rx.select.trigger(placeholder="Select category"),
+                    rx.select.content(
+                        rx.select.item("All", value="all"),
+                        rx.select.item("Active", value="active"),
+                        rx.select.item("Archived", value="archived")
+                    ),
+                    value=State.category,
+                    on_change=State.set_category
+                ),
+                rx.text("Price Range", weight="bold"),
+                rx.slider(
+                    value=[State.min_price, State.max_price],
+                    on_value_commit=State.set_price_range,
+                    min=0,
+                    max=1000
+                ),
+                spacing="3",
+                align="start",
+                width="100%"
+            ),
+            rx.hstack(
+                rx.button("Reset", variant="soft", on_click=State.reset_filters),
+                rx.drawer.close(
+                    rx.button("Apply", width="100%")
+                ),
+                spacing="2",
+                width="100%"
+            ),
+            spacing="4",
+            padding="4",
+            width="300px"
+        )
+    ),
+    direction="right"
+)
+```
+
+### Toast Component (`rx.toast`)
+
+**Purpose**: Temporary notification message
+
+**Methods**:
+- `rx.toast.info()`: Information toast
+- `rx.toast.success()`: Success toast
+- `rx.toast.warning()`: Warning toast
+- `rx.toast.error()`: Error toast
+- `rx.toast()`: Custom toast
+
+**Best Practices**:
+
+#### Toast Notifications in Event Handlers
+```python
+class NotificationState(rx.State):
+    def save_data(self):
+        try:
+            # Save logic
+            return rx.toast.success("Data saved successfully!")
+        except Exception as e:
+            return rx.toast.error(f"Error: {str(e)}")
+    
+    def show_info(self):
+        return rx.toast.info("Processing your request...")
+    
+    def show_warning(self):
+        return rx.toast.warning("This action cannot be undone")
+
+rx.vstack(
+    rx.button("Save", on_click=NotificationState.save_data),
+    rx.button("Info", on_click=NotificationState.show_info),
+    rx.button("Warning", on_click=NotificationState.show_warning),
+    spacing="2"
+)
+```
+
+#### Custom Toast
+```python
+class CustomToastState(rx.State):
+    def show_custom_toast(self):
+        return rx.toast(
+            title="Custom Notification",
+            description="This is a custom toast message",
+            duration=5000,
+            position="top-right"
+        )
+```
+
+## Common Patterns
+
+### Nested Dialog from Menu
+```python
+rx.dropdown_menu.root(
+    rx.dropdown_menu.trigger(
+        rx.button("Options")
+    ),
+    rx.dropdown_menu.content(
+        rx.dropdown_menu.item("View"),
+        rx.dialog.root(
+            rx.dialog.trigger(
+                rx.dropdown_menu.item("Edit")
+            ),
+            rx.dialog.content(
+                rx.dialog.title("Edit Item"),
+                # Edit form here
+            )
+        ),
+        rx.dropdown_menu.separator(),
+        rx.alert_dialog.root(
+            rx.alert_dialog.trigger(
+                rx.dropdown_menu.item("Delete", color_scheme="red")
+            ),
+            rx.alert_dialog.content(
+                rx.alert_dialog.title("Confirm Deletion"),
+                rx.alert_dialog.description("Are you sure?"),
+                # Confirmation buttons
+            )
+        )
+    )
+)
+```
+
+### Multi-Action Pattern
+```python
+# Combine different overlays for complete UX
+rx.hstack(
+    rx.tooltip(
+        rx.button(rx.icon("info"), variant="ghost"),
+        content="More information"
+    ),
+    rx.popover.root(
+        rx.popover.trigger(
+            rx.button("Options")
+        ),
+        rx.popover.content(
+            # Quick options
+        )
+    ),
+    rx.dialog.root(
+        rx.dialog.trigger(
+            rx.button("Edit")
+        ),
+        rx.dialog.content(
+            # Full edit form
+        )
+    ),
+    spacing="2"
+)
+```
+
+## Accessibility Best Practices
+
+- Always provide `title` and `description` for dialogs
+- Use semantic HTML roles (alert dialogs vs regular dialogs)
+- Ensure keyboard navigation works (Tab, Escape)
+- Provide clear close mechanisms
+- Use appropriate ARIA labels
+- Test with screen readers
+- Ensure sufficient color contrast
+
+## Performance Tips
+
+- Use controlled state only when necessary
+- Close overlays after actions complete
+- Lazy load heavy content in dialogs
+- Limit nested overlays (max 2-3 levels)
+- Use toast for non-critical notifications instead of dialogs

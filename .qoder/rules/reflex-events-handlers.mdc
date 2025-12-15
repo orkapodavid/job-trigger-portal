@@ -1,0 +1,723 @@
+---
+description: Expert guidance for Reflex Event system - Events, EventHandlers, EventSpecs, Event Triggers, and Special Events
+globs: ["**/*.py"]
+---
+
+# You are an expert in Reflex Event handling and event-driven architecture
+
+## Core Principles
+
+- Events trigger state changes and UI updates in Reflex applications
+- Event handlers are methods in State classes that respond to user interactions
+- EventSpec defines the structure of events at compile time
+- Event triggers are component-specific and listed in component documentation
+- Special events provide built-in functionality like navigation and notifications
+
+## Event Class (reflex.event.Event)
+
+Represents a state change event at runtime.
+
+### Event Structure
+
+```python
+class Event:
+    token: str              # Client identifier
+    name: str              # Event name (e.g., "state.increment")
+    router_data: dict      # Routing information
+    payload: dict          # Event data/arguments
+```
+
+### Event Flow
+
+```
+User Action → Event Trigger → Event Created → Event Handler → State Update → UI Re-render
+```
+
+## EventHandler (reflex.event.EventHandler)
+
+Defines how to respond to events.
+
+### Basic Event Handlers
+
+```python
+import reflex as rx
+
+class State(rx.State):
+    count: int = 0
+    text: str = ""
+    
+    # Simple event handler
+    def increment(self):
+        """No arguments"""
+        self.count += 1
+    
+    # Event handler with arguments
+    def set_text(self, value: str):
+        """Single argument from input"""
+        self.text = value
+    
+    # Event handler with multiple arguments
+    def update_values(self, count: int, text: str):
+        """Multiple arguments"""
+        self.count = count
+        self.text = text
+```
+
+### Event Handler Parameters
+
+```python
+class State(rx.State):
+    
+    def handler_with_params(self, value: str, index: int = 0):
+        """Access parameters using get_parameters()"""
+        # EventHandler.get_parameters() returns:
+        # {'value': Parameter, 'index': Parameter}
+        pass
+```
+
+### Async Event Handlers
+
+```python
+class State(rx.State):
+    data: list = []
+    is_loading: bool = False
+    
+    async def fetch_data(self):
+        """Async event handler for I/O operations"""
+        self.is_loading = True
+        
+        try:
+            import httpx
+            async with httpx.AsyncClient() as client:
+                response = await client.get("https://api.example.com/data")
+                self.data = response.json()
+        finally:
+            self.is_loading = False
+```
+
+### Chaining Event Handlers
+
+```python
+class State(rx.State):
+    step: int = 1
+    
+    def step_one(self):
+        self.step = 1
+        return State.step_two  # Chain to next handler
+    
+    def step_two(self):
+        self.step = 2
+        return State.step_three
+    
+    def step_three(self):
+        self.step = 3
+
+# Usage
+rx.button("Start Process", on_click=State.step_one)
+```
+
+### Returning Special Events
+
+```python
+class State(rx.State):
+    
+    def handle_submit(self):
+        # Process data...
+        return [
+            rx.toast.success("Data saved!"),
+            rx.redirect("/dashboard"),
+        ]
+    
+    def copy_to_clipboard(self, text: str):
+        return rx.set_clipboard(text)
+    
+    def download_file(self, url: str):
+        return rx.download(url=url, filename="document.pdf")
+```
+
+## EventSpec (reflex.event.EventSpec)
+
+Compile-time event specification.
+
+### EventSpec Structure
+
+```python
+class EventSpec:
+    handler: EventHandler       # The event handler to call
+    client_handler_name: str   # Client-side handler name
+    args: tuple                # Arguments to pass
+```
+
+### Creating EventSpecs
+
+```python
+class State(rx.State):
+    
+    def process_item(self, item_id: int):
+        pass
+
+# Create EventSpec with arguments
+spec = State.process_item(42)
+
+# EventSpec with args tuple
+spec_with_args = EventSpec(
+    handler=State.process_item,
+    args=((rx.Var.create(42),),)
+)
+```
+
+### Modifying EventSpecs
+
+**with_args**: Replace arguments
+```python
+spec = State.handler.with_args(
+    args=((rx.Var.create("new_value"),),)
+)
+```
+
+**add_args**: Add arguments
+```python
+spec = State.handler.add_args(
+    rx.Var.create("additional_arg")
+)
+```
+
+## Event Triggers
+
+Component-specific events that trigger state changes.
+
+### Common Event Triggers
+
+**Mouse Events**
+```python
+class State(rx.State):
+    clicked: bool = False
+    position: dict = {}
+    
+    def handle_click(self):
+        self.clicked = True
+    
+    def handle_double_click(self):
+        self.clicked = False
+    
+    def handle_mouse_enter(self):
+        pass
+    
+    def handle_mouse_leave(self):
+        pass
+
+# Usage
+rx.box(
+    "Click me",
+    on_click=State.handle_click,
+    on_double_click=State.handle_double_click,
+    on_mouse_enter=State.handle_mouse_enter,
+    on_mouse_leave=State.handle_mouse_leave,
+    on_context_menu=State.handle_right_click,
+)
+```
+
+**Keyboard Events**
+```python
+class State(rx.State):
+    key_pressed: str = ""
+    
+    def handle_key_press(self, key: str):
+        self.key_pressed = key
+
+rx.input(
+    on_key_down=State.handle_key_press,
+    on_key_up=State.handle_key_release,
+)
+```
+
+**Form Events**
+```python
+class State(rx.State):
+    form_data: dict = {}
+    
+    def handle_change(self, value: str):
+        """Triggered on each keystroke"""
+        pass
+    
+    def handle_submit(self, form_data: dict):
+        self.form_data = form_data
+    
+    def handle_focus(self):
+        pass
+    
+    def handle_blur(self):
+        pass
+
+rx.form(
+    rx.input(
+        on_change=State.handle_change,
+        on_focus=State.handle_focus,
+        on_blur=State.handle_blur,
+    ),
+    on_submit=State.handle_submit,
+)
+```
+
+**Lifecycle Events**
+```python
+class State(rx.State):
+    mounted: bool = False
+    
+    def on_component_mount(self):
+        """Called when component mounts"""
+        self.mounted = True
+        # Initialize data, API calls, etc.
+    
+    def on_component_unmount(self):
+        """Called before component unmounts"""
+        self.mounted = False
+        # Cleanup, save state, etc.
+
+rx.box(
+    "Content",
+    on_mount=State.on_component_mount,
+    on_unmount=State.on_component_unmount,
+)
+```
+
+**Scroll Events**
+```python
+class State(rx.State):
+    scroll_position: int = 0
+    
+    def handle_scroll(self, event):
+        # Track scroll position
+        pass
+
+rx.box(
+    # Scrollable content
+    on_scroll=State.handle_scroll,
+    overflow="auto",
+    height="500px",
+)
+```
+
+### Page Load Events
+
+```python
+class State(rx.State):
+    data: list = []
+    is_authenticated: bool = False
+    
+    async def check_auth(self):
+        """Run when page loads"""
+        # Check authentication status
+        token = self.get_cookie("auth_token")
+        if token:
+            self.is_authenticated = True
+    
+    async def load_data(self):
+        """Fetch data on page load"""
+        self.data = await fetch_from_api()
+
+# Method 1: Using decorator
+@rx.page(route="/dashboard", on_load=State.load_data)
+def dashboard():
+    return rx.container(...)
+
+# Method 2: Using add_page
+app.add_page(
+    dashboard,
+    route="/dashboard",
+    on_load=[State.check_auth, State.load_data],  # Multiple handlers
+)
+```
+
+### Component Lifecycle
+
+**on_mount**: Component rendered and attached to DOM
+```python
+class State(rx.State):
+    initialized: bool = False
+    
+    def initialize_component(self):
+        """Fires when component first appears"""
+        self.initialized = True
+        # Fetch initial data
+        # Set up subscriptions
+        # Initialize third-party libraries
+
+def component():
+    return rx.box(
+        "Content",
+        on_mount=State.initialize_component,
+    )
+```
+
+**on_unmount**: Component about to be removed
+```python
+class State(rx.State):
+    
+    def cleanup_component(self):
+        """Fires before component is removed"""
+        # Save state
+        # Clean up resources
+        # Cancel subscriptions
+        # Clear timers
+
+def component():
+    return rx.box(
+        "Content",
+        on_unmount=State.cleanup_component,
+    )
+```
+
+**When Lifecycle Events Fire**
+- `on_mount`: First page load, conditional rendering (appear), internal navigation
+- `on_unmount`: Internal navigation away, conditional removal (hidden)
+- **NOT** fired: Page refresh, browser close, external links
+
+## Special Events
+
+Built-in events for common functionality.
+
+### rx.console_log
+
+```python
+class State(rx.State):
+    
+    def debug_action(self, value: str):
+        """Log to browser console"""
+        return rx.console_log(f"Debug: {value}")
+
+rx.button("Debug", on_click=lambda: State.debug_action("test"))
+```
+
+### rx.redirect
+
+```python
+class State(rx.State):
+    
+    def go_to_dashboard(self):
+        """Redirect within app"""
+        return rx.redirect("/dashboard")
+    
+    def open_external(self):
+        """Open in new tab"""
+        return rx.redirect("https://example.com", external=True)
+    
+    def conditional_redirect(self):
+        if self.is_authenticated:
+            return rx.redirect("/dashboard")
+        return rx.redirect("/login")
+
+rx.button("Go to Dashboard", on_click=State.go_to_dashboard)
+rx.button("Open External", on_click=State.open_external)
+```
+
+### rx.scroll_to
+
+```python
+class State(rx.State):
+    
+    def scroll_to_section(self, element_id: str):
+        """Scroll to element by ID"""
+        return rx.scroll_to(element_id)
+
+rx.button(
+    "Scroll to Footer",
+    on_click=lambda: State.scroll_to_section("footer")
+)
+
+rx.box(id="footer", ...)
+```
+
+### rx.set_clipboard
+
+```python
+class State(rx.State):
+    code: str = "print('Hello World')"
+    
+    def copy_code(self):
+        """Copy to clipboard"""
+        return rx.set_clipboard(self.code)
+
+rx.button("Copy Code", on_click=State.copy_code)
+```
+
+### rx.set_value
+
+```python
+class State(rx.State):
+    
+    def clear_input(self, ref: str):
+        """Clear input field by ref"""
+        return rx.set_value(ref, "")
+    
+    def set_input(self, ref: str, value: str):
+        """Set input value"""
+        return rx.set_value(ref, value)
+
+rx.input(ref="my_input")
+rx.button("Clear", on_click=lambda: State.clear_input("my_input"))
+```
+
+### rx.window_alert
+
+```python
+class State(rx.State):
+    
+    def show_alert(self, message: str):
+        """Show browser alert"""
+        return rx.window_alert(message)
+
+rx.button("Alert", on_click=lambda: State.show_alert("Hello!"))
+```
+
+### rx.download
+
+```python
+class State(rx.State):
+    
+    def download_file(self):
+        """Download file from URL"""
+        return rx.download(
+            url="/assets/document.pdf",
+            filename="download.pdf",
+        )
+    
+    def download_data(self, data: str):
+        """Download generated data"""
+        return rx.download(
+            data=data,
+            filename="data.txt",
+        )
+    
+    def download_json(self, json_data: dict):
+        """Download JSON data"""
+        import json
+        return rx.download(
+            data=json.dumps(json_data, indent=2),
+            filename="data.json",
+        )
+
+rx.button("Download", on_click=State.download_file)
+```
+
+### rx.toast (Notifications)
+
+```python
+class State(rx.State):
+    
+    def show_success(self):
+        return rx.toast.success("Operation successful!")
+    
+    def show_error(self):
+        return rx.toast.error("Something went wrong!")
+    
+    def show_warning(self):
+        return rx.toast.warning("Please be careful!")
+    
+    def show_info(self):
+        return rx.toast.info("For your information")
+    
+    def custom_toast(self):
+        return rx.toast(
+            "Custom message",
+            position="top-right",
+            duration=5000,
+        )
+```
+
+## Best Practices
+
+### Event Handler Organization
+
+```python
+class State(rx.State):
+    # Group related handlers
+    
+    # === Data Loading ===
+    async def load_initial_data(self):
+        pass
+    
+    async def refresh_data(self):
+        pass
+    
+    # === Form Handling ===
+    def handle_input_change(self, field: str, value: str):
+        pass
+    
+    def validate_form(self):
+        pass
+    
+    async def submit_form(self):
+        pass
+    
+    # === UI State ===
+    def toggle_sidebar(self):
+        pass
+    
+    def change_theme(self, theme: str):
+        pass
+```
+
+### Error Handling in Events
+
+```python
+class State(rx.State):
+    error: str = ""
+    
+    async def safe_operation(self):
+        """Handle errors gracefully"""
+        self.error = ""
+        
+        try:
+            result = await risky_operation()
+            return rx.toast.success("Success!")
+        except ValueError as e:
+            self.error = f"Validation error: {e}"
+            return rx.toast.error(self.error)
+        except Exception as e:
+            self.error = f"Unexpected error: {e}"
+            return rx.toast.error("Something went wrong")
+```
+
+### Debouncing Events
+
+```python
+import asyncio
+
+class State(rx.State):
+    search_query: str = ""
+    search_results: list = []
+    _search_task: asyncio.Task = None
+    
+    async def search(self, query: str):
+        """Debounced search"""
+        self.search_query = query
+        
+        # Cancel previous search
+        if self._search_task:
+            self._search_task.cancel()
+        
+        # Wait before searching
+        await asyncio.sleep(0.5)
+        
+        # Perform search
+        self.search_results = await perform_search(query)
+```
+
+### Event Composition
+
+```python
+class State(rx.State):
+    
+    def validate_and_save(self, data: dict):
+        """Compose multiple operations"""
+        # Validate
+        if not self.validate(data):
+            return rx.toast.error("Validation failed")
+        
+        # Save
+        self.save(data)
+        
+        # Return multiple events
+        return [
+            rx.toast.success("Saved successfully!"),
+            rx.redirect("/dashboard"),
+        ]
+```
+
+### Conditional Events
+
+```python
+class State(rx.State):
+    is_authenticated: bool = False
+    
+    def protected_action(self):
+        """Only execute if authenticated"""
+        if not self.is_authenticated:
+            return rx.redirect("/login")
+        
+        # Perform protected action
+        return rx.toast.success("Action completed")
+```
+
+## Common Patterns
+
+### Loading States
+
+```python
+class State(rx.State):
+    is_loading: bool = False
+    
+    async def fetch_with_loading(self):
+        """Show loading state during async operation"""
+        self.is_loading = True
+        try:
+            await fetch_data()
+        finally:
+            self.is_loading = False
+
+# UI
+rx.cond(
+    State.is_loading,
+    rx.spinner(),
+    rx.button("Load Data", on_click=State.fetch_with_loading),
+)
+```
+
+### Form Submission
+
+```python
+class FormState(rx.State):
+    name: str = ""
+    email: str = ""
+    errors: dict = {}
+    
+    def set_name(self, value: str):
+        self.name = value
+        if "name" in self.errors:
+            del self.errors["name"]
+    
+    def set_email(self, value: str):
+        self.email = value
+        if "email" in self.errors:
+            del self.errors["email"]
+    
+    def submit(self):
+        # Validate
+        self.errors = {}
+        if not self.name:
+            self.errors["name"] = "Required"
+        if not self.email:
+            self.errors["email"] = "Required"
+        
+        if self.errors:
+            return rx.toast.error("Please fix errors")
+        
+        # Submit
+        return [
+            self.save_data(),
+            rx.toast.success("Form submitted!"),
+        ]
+```
+
+### Optimistic UI Updates
+
+```python
+class State(rx.State):
+    items: list[dict] = []
+    
+    async def add_item_optimistic(self, item: dict):
+        """Add item immediately, rollback on failure"""
+        # Add optimistically
+        self.items.append(item)
+        
+        try:
+            # Save to backend
+            await save_to_api(item)
+        except Exception:
+            # Rollback on error
+            self.items.remove(item)
+            return rx.toast.error("Failed to add item")
+        
+        return rx.toast.success("Item added!")
+```

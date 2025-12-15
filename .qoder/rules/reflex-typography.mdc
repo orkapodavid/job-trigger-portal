@@ -1,0 +1,812 @@
+---
+description: Expert guide for Reflex Typography components including Text, Heading, Link, Markdown, Code, Blockquote, and text formatting elements
+globs:
+  - "**/*.py"
+---
+
+# Reflex Typography Components Expert
+
+You are an expert in Reflex's Typography components, specializing in creating beautiful, accessible, and readable text content with proper hierarchy and formatting.
+
+## Core Typography Components
+
+### Text Component (`rx.text`)
+
+**Purpose**: Foundational text primitive based on paragraph element
+
+**Key Properties**:
+- `as_`: "p" | "label" | "div" | "span" (semantic element, default: "p")
+- `size`: "1" to "9" (controls font size, line height, letter spacing)
+- `weight`: "light" | "regular" | "medium" | "bold"
+- `align`: "left" | "center" | "right"
+- `trim`: "normal" | "start" | "end" | "both" (trim leading space)
+- `color_scheme`: Theme colors
+- `high_contrast`: bool - Increase color contrast
+
+**Best Practices**:
+
+#### Basic Text
+```python
+# Simple paragraph
+rx.text("The quick brown fox jumps over the lazy dog.")
+
+# With size
+rx.text("Large text", size="5")
+rx.text("Small text", size="1")
+
+# As different elements
+rx.text("This is a paragraph", as_="p")
+rx.text("This is a label", as_="label")
+rx.text("This is a span", as_="span")
+```
+
+#### Text Sizing for Different Contexts
+```python
+# UI labels (sizes 1-3)
+rx.text("Button label", size="2")
+rx.text("Field label", size="1")
+
+# Long-form content (sizes 2-4)
+rx.text(
+    "This is a paragraph of long-form content. Sizes 2-4 are "
+    "designed to work well for extended reading.",
+    size="3"
+)
+
+# Hierarchical sizing
+rx.vstack(
+    rx.text("Primary content", size="4"),
+    rx.text("Secondary content", size="3"),
+    rx.text("Tertiary content", size="2"),
+    spacing="2"
+)
+```
+
+#### Text Weight
+```python
+rx.vstack(
+    rx.text("Light weight", weight="light"),
+    rx.text("Regular weight", weight="regular"),
+    rx.text("Medium weight", weight="medium"),
+    rx.text("Bold weight", weight="bold"),
+    spacing="2"
+)
+```
+
+#### Text Alignment
+```python
+rx.vstack(
+    rx.text("Left aligned", align="left"),
+    rx.text("Center aligned", align="center"),
+    rx.text("Right aligned", align="right"),
+    spacing="2",
+    width="100%"
+)
+```
+
+#### Text Trimming
+```python
+# Trim leading space for better vertical rhythm
+rx.card(
+    rx.vstack(
+        rx.text("Without trim", size="5"),
+        rx.text("Notice the spacing difference"),
+        spacing="2"
+    ),
+    padding="4"
+)
+
+rx.card(
+    rx.vstack(
+        rx.text("With trim", size="5", trim="both"),
+        rx.text("Better spacing", trim="both"),
+        spacing="2"
+    ),
+    padding="4"
+)
+```
+
+#### Color Schemes
+```python
+rx.vstack(
+    rx.text("Accent color", color_scheme="accent"),
+    rx.text("Gray color", color_scheme="gray"),
+    rx.text("Blue color", color_scheme="blue"),
+    rx.text("Red color", color_scheme="red"),
+    spacing="2"
+)
+
+# High contrast
+rx.text("High contrast text", color_scheme="gray", high_contrast=True)
+```
+
+#### Text with Formatting Components
+```python
+rx.text(
+    "Look, such a ",
+    rx.link("helpful link", href="/help"),
+    ", an ",
+    rx.em("italic emphasis"),
+    ", a piece of ",
+    rx.code("computer code"),
+    ", and even a hotkey ",
+    rx.kbd("⇧⌘A"),
+    " within the text."
+)
+```
+
+#### Preformatted Text
+```python
+# Preserve whitespace
+rx.text(
+    "This is     not     preserved",
+    white_space="normal"
+)
+
+rx.text(
+    "This is     pre     formatted",
+    white_space="pre"
+)
+```
+
+#### Text with Form Controls
+```python
+# Automatically centers with first line
+rx.text(
+    rx.checkbox(),
+    "I understand that these documents are confidential and "
+    "cannot be shared with a third party.",
+    size="2"
+)
+```
+
+### Heading Component (`rx.heading`)
+
+**Purpose**: Semantic headings (h1-h6) with proper hierarchy
+
+**Key Properties**:
+- `as_`: "h1" | "h2" | "h3" | "h4" | "h5" | "h6" (default: "h2")
+- `size`: "1" to "9" (visual size, independent of semantic level)
+- `weight`: "light" | "regular" | "medium" | "bold"
+- `align`: "left" | "center" | "right"
+- `trim`: "normal" | "start" | "end" | "both"
+- `color_scheme`: Theme colors
+- `high_contrast`: bool
+
+**Best Practices**:
+
+#### Semantic Heading Hierarchy
+```python
+rx.vstack(
+    rx.heading("Page Title", as_="h1", size="9"),
+    rx.heading("Section Heading", as_="h2", size="7"),
+    rx.heading("Subsection Heading", as_="h3", size="5"),
+    rx.heading("Minor Heading", as_="h4", size="4"),
+    spacing="4",
+    align="start"
+)
+```
+
+#### Visual vs Semantic Sizing
+```python
+# Visual size can differ from semantic level
+rx.heading(
+    "Large h3",
+    as_="h3",
+    size="8"  # Visually large but semantically h3
+)
+
+rx.heading(
+    "Small h1",
+    as_="h1",
+    size="4"  # Visually small but semantically h1
+)
+```
+
+#### Heading Styles
+```python
+rx.vstack(
+    rx.heading("Default Heading", size="6"),
+    rx.heading("Colored Heading", size="6", color_scheme="blue"),
+    rx.heading("High Contrast", size="6", high_contrast=True),
+    rx.heading("Light Weight", size="6", weight="light"),
+    spacing="3"
+)
+```
+
+#### Page Header Pattern
+```python
+rx.vstack(
+    rx.heading("Dashboard", size="8", weight="bold"),
+    rx.text(
+        "Welcome back! Here's what's happening with your projects.",
+        size="3",
+        color_scheme="gray"
+    ),
+    spacing="2",
+    align="start"
+)
+```
+
+### Link Component (`rx.link`)
+
+**Purpose**: Hyperlinks for navigation
+
+**Key Properties**:
+- `href`: URL or path
+- `is_external`: bool - Opens in new tab
+- `underline`: "auto" | "always" | "hover" | "none"
+- `size`: Text size
+- `weight`: Font weight
+- `color_scheme`: Theme colors
+- `high_contrast`: bool
+
+**Best Practices**:
+
+#### Internal Links
+```python
+rx.link("Go to Home", href="/")
+rx.link("View Profile", href="/profile")
+rx.link("Settings", href="/settings")
+```
+
+#### External Links
+```python
+rx.link(
+    "Visit Website",
+    href="https://example.com",
+    is_external=True
+)
+
+# With icon indicator
+rx.link(
+    "Documentation",
+    rx.icon("external-link", size=14),
+    href="https://docs.example.com",
+    is_external=True
+)
+```
+
+#### Link Styles
+```python
+# Underline variants
+rx.vstack(
+    rx.link("Auto underline", href="#", underline="auto"),
+    rx.link("Always underline", href="#", underline="always"),
+    rx.link("Hover underline", href="#", underline="hover"),
+    rx.link("No underline", href="#", underline="none"),
+    spacing="2"
+)
+
+# Colored links
+rx.link("Blue link", href="#", color_scheme="blue")
+rx.link("Red link", href="#", color_scheme="red")
+```
+
+#### Navigation Links
+```python
+rx.hstack(
+    rx.link("Home", href="/", underline="hover"),
+    rx.link("About", href="/about", underline="hover"),
+    rx.link("Contact", href="/contact", underline="hover"),
+    spacing="4"
+)
+```
+
+#### Button-Style Links
+```python
+rx.link(
+    rx.button("Learn More"),
+    href="/learn-more"
+)
+```
+
+### Markdown Component (`rx.markdown`)
+
+**Purpose**: Render Markdown content
+
+**Key Properties**:
+- First argument: Markdown string
+- `component_map`: Custom component mapping for MD elements
+
+**Best Practices**:
+
+#### Basic Markdown
+```python
+rx.markdown(
+    """
+    # Heading 1
+    ## Heading 2
+    
+    This is a paragraph with **bold** and *italic* text.
+    
+    - List item 1
+    - List item 2
+    - List item 3
+    
+    [Link](https://example.com)
+    
+    ```python
+    def hello():
+        print("Hello, World!")
+    ```
+    """
+)
+```
+
+#### Dynamic Markdown from State
+```python
+class ContentState(rx.State):
+    markdown_content: str = "# Welcome\n\nThis is dynamic content."
+
+rx.markdown(ContentState.markdown_content)
+```
+
+#### Markdown with Custom Styling
+```python
+rx.box(
+    rx.markdown(State.article_content),
+    padding="4",
+    max_width="800px",
+    margin="0 auto"
+)
+```
+
+### Code Component (`rx.code`)
+
+**Purpose**: Inline code snippets
+
+**Key Properties**:
+- `variant`: "solid" | "soft" | "outline" | "ghost"
+- `color_scheme`: Theme colors
+- `size`: "1" | "2" | "3"
+- `weight`: Font weight
+
+**Best Practices**:
+
+#### Inline Code
+```python
+rx.text(
+    "Use the ",
+    rx.code("rx.text"),
+    " component to display text."
+)
+
+rx.text(
+    "Run ",
+    rx.code("pip install reflex"),
+    " to install Reflex."
+)
+```
+
+#### Code Variants
+```python
+rx.hstack(
+    rx.code("solid", variant="solid"),
+    rx.code("soft", variant="soft"),
+    rx.code("outline", variant="outline"),
+    rx.code("ghost", variant="ghost"),
+    spacing="2"
+)
+```
+
+#### Colored Code
+```python
+rx.text(
+    "Environment: ",
+    rx.code("production", color_scheme="green")
+)
+
+rx.text(
+    "Error code: ",
+    rx.code("500", color_scheme="red")
+)
+```
+
+### Blockquote Component (`rx.blockquote`)
+
+**Purpose**: Display quotations
+
+**Key Properties**:
+- `size`: "1" | "2" | "3"
+- `weight`: Font weight
+- `color_scheme`: Theme colors
+- `high_contrast`: bool
+
+**Best Practices**:
+
+#### Simple Blockquote
+```python
+rx.blockquote(
+    "The only way to do great work is to love what you do."
+)
+```
+
+#### Blockquote with Attribution
+```python
+rx.vstack(
+    rx.blockquote(
+        "Design is not just what it looks like and feels like. "
+        "Design is how it works.",
+        size="3"
+    ),
+    rx.text("— Steve Jobs", size="2", color_scheme="gray", align="right"),
+    spacing="2",
+    align="start"
+)
+```
+
+#### Styled Blockquote
+```python
+rx.blockquote(
+    "Success is not final, failure is not fatal: it is the courage "
+    "to continue that counts.",
+    size="3",
+    color_scheme="blue",
+    high_contrast=True
+)
+```
+
+### Em Component (`rx.em`)
+
+**Purpose**: Emphasized text (italic)
+
+**Best Practices**:
+```python
+rx.text(
+    "This is ",
+    rx.em("emphasized"),
+    " text."
+)
+```
+
+### Strong Component (`rx.strong`)
+
+**Purpose**: Strong importance (bold)
+
+**Best Practices**:
+```python
+rx.text(
+    "This is ",
+    rx.strong("important"),
+    " information."
+)
+
+rx.text(
+    rx.strong("Warning:"),
+    " This action cannot be undone."
+)
+```
+
+### Quote Component (`rx.quote`)
+
+**Purpose**: Short inline quotations
+
+**Best Practices**:
+```python
+rx.text(
+    "As they say, ",
+    rx.quote("practice makes perfect"),
+    "."
+)
+```
+
+### Kbd Component (`rx.kbd`)
+
+**Purpose**: Keyboard shortcuts
+
+**Best Practices**:
+```python
+rx.text(
+    "Press ",
+    rx.kbd("⌘"),
+    " + ",
+    rx.kbd("K"),
+    " to open search."
+)
+
+rx.text(
+    "Save with ",
+    rx.kbd("Ctrl"),
+    " + ",
+    rx.kbd("S")
+)
+
+# Common shortcuts
+rx.vstack(
+    rx.hstack(
+        rx.kbd("⌘K"),
+        rx.text("Search"),
+        spacing="2"
+    ),
+    rx.hstack(
+        rx.kbd("⌘S"),
+        rx.text("Save"),
+        spacing="2"
+    ),
+    rx.hstack(
+        rx.kbd("⌘Z"),
+        rx.text("Undo"),
+        spacing="2"
+    ),
+    spacing="2",
+    align="start"
+)
+```
+
+## Typography Patterns
+
+### Article Layout
+```python
+def article():
+    return rx.container(
+        rx.vstack(
+            # Title
+            rx.heading(
+                "Understanding Typography",
+                as_="h1",
+                size="9",
+                weight="bold"
+            ),
+            # Metadata
+            rx.text(
+                "Published on January 15, 2024 by ",
+                rx.link("John Doe", href="/author/john-doe"),
+                size="2",
+                color_scheme="gray"
+            ),
+            rx.separator(),
+            # Content
+            rx.text(
+                "Typography is the art and technique of arranging type to make "
+                "written language legible, readable, and appealing when displayed.",
+                size="4"
+            ),
+            rx.heading("The Basics", as_="h2", size="7"),
+            rx.text(
+                "Good typography establishes hierarchy, guides the reader's eye, "
+                "and enhances the overall reading experience.",
+                size="3"
+            ),
+            rx.blockquote(
+                "Typography is the craft of endowing human language with a "
+                "durable visual form.",
+                size="3"
+            ),
+            rx.heading("Code Examples", as_="h3", size="5"),
+            rx.text(
+                "Here's how to use the ",
+                rx.code("rx.text"),
+                " component:",
+                size="3"
+            ),
+            rx.code_block(
+                'rx.text("Hello, World!", size="4")',
+                language="python"
+            ),
+            spacing="4",
+            align="start",
+            width="100%"
+        ),
+        size="3",
+        padding_y="8"
+    )
+```
+
+### Documentation Page
+```python
+def docs_page():
+    return rx.vstack(
+        rx.heading("Component API", size="8"),
+        rx.text(
+            "This component provides advanced functionality for data display.",
+            size="3",
+            color_scheme="gray"
+        ),
+        rx.separator(),
+        
+        rx.heading("Installation", as_="h2", size="6"),
+        rx.text(
+            "Install the component using:",
+            size="3"
+        ),
+        rx.code_block(
+            "pip install reflex",
+            language="bash"
+        ),
+        
+        rx.heading("Basic Usage", as_="h2", size="6"),
+        rx.text(
+            "Import and use the component like this:",
+            size="3"
+        ),
+        rx.code_block(
+            """import reflex as rx
+
+def index():
+    return rx.text("Hello!")
+            """,
+            language="python"
+        ),
+        
+        rx.heading("Props", as_="h2", size="6"),
+        rx.text(
+            "The component accepts the following props:",
+            size="3"
+        ),
+        rx.vstack(
+            rx.text(
+                rx.code("size"),
+                " - Controls the size (1-9)",
+                size="3"
+            ),
+            rx.text(
+                rx.code("color_scheme"),
+                " - Sets the color theme",
+                size="3"
+            ),
+            spacing="2",
+            align="start"
+        ),
+        
+        spacing="4",
+        align="start",
+        max_width="800px"
+    )
+```
+
+### Card with Rich Content
+```python
+rx.card(
+    rx.vstack(
+        rx.heading("Feature Announcement", size="5"),
+        rx.text(
+            "We're excited to introduce ",
+            rx.strong("new capabilities"),
+            " that will ",
+            rx.em("transform"),
+            " your workflow.",
+            size="3"
+        ),
+        rx.blockquote(
+            "This is a game-changer for our team!",
+            color_scheme="blue"
+        ),
+        rx.text(
+            "Learn more in our ",
+            rx.link("documentation", href="/docs"),
+            ".",
+            size="2"
+        ),
+        spacing="3",
+        align="start"
+    )
+)
+```
+
+### Keyboard Shortcuts Help
+```python
+def shortcuts_help():
+    return rx.card(
+        rx.vstack(
+            rx.heading("Keyboard Shortcuts", size="5"),
+            rx.separator(),
+            rx.vstack(
+                rx.hstack(
+                    rx.kbd("⌘K"),
+                    rx.text("Open command palette"),
+                    justify="between",
+                    width="100%"
+                ),
+                rx.hstack(
+                    rx.kbd("⌘S"),
+                    rx.text("Save current file"),
+                    justify="between",
+                    width="100%"
+                ),
+                rx.hstack(
+                    rx.kbd("⌘⇧P"),
+                    rx.text("Open settings"),
+                    justify="between",
+                    width="100%"
+                ),
+                rx.hstack(
+                    rx.kbd("Esc"),
+                    rx.text("Close dialog"),
+                    justify="between",
+                    width="100%"
+                ),
+                spacing="2",
+                width="100%"
+            ),
+            spacing="3",
+            align="start",
+            width="300px"
+        )
+    )
+```
+
+### Feature Comparison
+```python
+rx.vstack(
+    rx.heading("Plan Comparison", size="6"),
+    rx.grid(
+        # Free plan
+        rx.card(
+            rx.vstack(
+                rx.heading("Free", size="4"),
+                rx.text(
+                    rx.strong("$0"),
+                    "/month",
+                    size="2"
+                ),
+                rx.separator(),
+                rx.text("✓ Basic features", size="2"),
+                rx.text("✓ 5 projects", size="2"),
+                rx.text("✗ Priority support", size="2", color_scheme="gray"),
+                spacing="2",
+                align="start"
+            )
+        ),
+        # Pro plan
+        rx.card(
+            rx.vstack(
+                rx.heading("Pro", size="4"),
+                rx.text(
+                    rx.strong("$29"),
+                    "/month",
+                    size="2"
+                ),
+                rx.separator(),
+                rx.text("✓ All features", size="2"),
+                rx.text("✓ Unlimited projects", size="2"),
+                rx.text("✓ Priority support", size="2"),
+                spacing="2",
+                align="start"
+            ),
+            border="2px solid",
+            border_color=rx.color("accent", 8)
+        ),
+        columns="2",
+        spacing="4"
+    ),
+    spacing="4",
+    align="start"
+)
+```
+
+## Best Practices
+
+1. **Semantic HTML**: Use proper heading hierarchy (h1 → h2 → h3)
+2. **Size Scale**: Use consistent size values across typography
+3. **Line Length**: Limit text width to 60-80 characters for readability
+4. **Contrast**: Ensure sufficient color contrast (use `high_contrast` when needed)
+5. **Trim Headings**: Use `trim="both"` on headings in cards for better spacing
+6. **Weight Hierarchy**: Use weight to establish visual hierarchy
+7. **Link States**: Provide clear hover/active states for links
+8. **Code Formatting**: Use `rx.code` for inline code, `rx.code_block` for blocks
+9. **Markdown**: Use for user-generated or CMS content
+10. **Accessibility**: Provide meaningful link text (avoid "click here")
+
+## Accessibility
+
+- Maintain logical heading hierarchy (don't skip levels)
+- Use semantic elements (`as_` prop)
+- Provide sufficient color contrast
+- Make link text descriptive
+- Use `rx.strong` for importance, `rx.em` for emphasis
+- Test with screen readers
+- Ensure text is resizable
+- Avoid justified text alignment
+
+## Typography Scale Reference
+
+**Sizes for UI Labels**: 1-3
+**Sizes for Body Text**: 2-4
+**Sizes for Headings**: 5-9
+
+Choose sizes based on:
+- Reading distance
+- Content length
+- Visual hierarchy
+- Context (UI vs content)

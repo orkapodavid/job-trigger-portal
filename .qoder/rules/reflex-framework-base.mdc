@@ -1,0 +1,567 @@
+---
+description: Reflex framework best practices for full-stack Python web development
+globs: **/*.py, **/rxconfig.py
+---
+
+# Reflex Framework Rules
+
+You are an expert in Python, Reflex, and full-stack web development.
+
+## Key Principles
+
+- Write concise, technical responses with accurate Reflex examples
+- Use functional, declarative programming for components
+- Leverage Reflex's compile-time frontend (to JavaScript) and runtime backend (Python)
+- Use descriptive variable names with auxiliary verbs (e.g., is_loading, has_permission)
+- Use snake_case for files, functions, and variables; PascalCase for classes
+- Prefer named component functions over anonymous functions
+- Use type annotations for all state variables and function signatures
+
+## Project Structure
+
+```
+app_name/
+├── .web/                    # Auto-generated JS (never edit)
+├── assets/                  # Static files (images, fonts, CSS)
+│   └── favicon.ico
+├── app_name/               # Main application code
+│   ├── __init__.py
+│   ├── app_name.py         # App initialization
+│   ├── pages/              # Page modules (medium+ projects)
+│   ├── components/         # Reusable components (medium+ projects)
+│   └── states/             # State modules (large projects)
+├── rxconfig.py             # App configuration
+└── requirements.txt
+```
+
+## Installation & Setup
+
+```bash
+pip install reflex
+reflex init                  # Create new project
+reflex run                   # Start dev server
+```
+
+## Components
+
+### Component Basics
+- Components are functions returning Reflex component objects
+- Children: positional arguments (text or components)
+- Props: keyword arguments (styling, behavior, event handlers)
+- Use built-in components (60+): `rx.button`, `rx.input`, `rx.vstack`, etc.
+- Access HTML elements via `rx.el` namespace for granular control
+- Style with snake_case CSS props: `background_color`, `border_radius`
+
+### Component Patterns
+
+```python
+import reflex as rx
+
+# Simple component
+def header():
+    return rx.heading("Dashboard", size="8")
+
+# Component with props
+def styled_button(text: str):
+    return rx.button(
+        text,
+        background_color="blue",
+        color="white",
+        padding="10px",
+        border_radius="5px",
+        on_click=MyState.handle_click,
+    )
+
+# Nested components with layout
+def card(title: str, content: str):
+    return rx.vstack(
+        rx.heading(title, size="6"),
+        rx.text(content),
+        spacing="4",
+        padding="4",
+        border="1px solid gray",
+    )
+```
+
+## State Management
+
+### State Definition
+- Subclass `rx.State` for all state management
+- Use type annotations for all state variables
+- Event handlers are ONLY way to modify state
+- Reference state vars via class attributes: `MyState.count`
+- Use `@rx.event` decorator for event handler functions
+
+### State Patterns
+
+```python
+class MyState(rx.State):
+    # State variables with type annotations
+    count: int = 0
+    name: str = ""
+    is_loading: bool = False
+    items: list[str] = []
+    
+    # Event handlers modify state
+    @rx.event
+    def increment(self):
+        self.count += 1
+    
+    @rx.event
+    def increment_by(self, amount: int):
+        self.count += amount
+    
+    @rx.event
+    def set_name(self, value: str):
+        self.name = value
+    
+    @rx.event
+    async def fetch_data(self):
+        self.is_loading = True
+        yield  # Updates UI immediately
+        # Async operation here
+        self.is_loading = False
+```
+
+## Event System
+
+### Event Handlers
+- Connect components to handlers via event props: `on_click`, `on_change`, `on_submit`
+- Match argument count between trigger and handler
+- Use `yield` in handlers for UI updates during long operations
+- Form `on_submit` passes dict; Input `on_change` passes string
+
+### Event Patterns
+
+```python
+# Button click (no args)
+rx.button("Click", on_click=MyState.increment)
+
+# Button click with args (use lambda)
+rx.button("Add 5", on_click=lambda: MyState.increment_by(5))
+
+# Input change (passes value as string)
+rx.input(
+    value=MyState.name,
+    on_change=MyState.set_name,
+)
+
+# Form submission (passes dict)
+rx.form(
+    rx.input(name="username"),
+    rx.input(name="email"),
+    rx.button("Submit", type="submit"),
+    on_submit=MyState.handle_form,
+)
+```
+
+## Compile-time vs Runtime
+
+### Critical Distinction
+- **Compile-time**: Components compile to JavaScript (runs in browser)
+- **Runtime**: State and event handlers run in Python (runs on server)
+- **Cannot** use arbitrary Python operations on state vars in components
+- **Can** use pure Python functions that don't depend on state vars
+
+### What Works vs What Doesn't
+
+```python
+# ✅ Pure Python functions (compile-time safe)
+def is_even(n: int) -> bool:
+    return n % 2 == 0
+
+rx.foreach(range(10), lambda i: rx.text(f"{i}: {is_even(i)}"))
+
+# ✅ Var operations on state vars
+rx.text(MyState.count % 2 == 0)
+rx.text(MyState.name.lower())
+rx.text(MyState.items.length())
+
+# ✅ rx.cond for conditionals
+rx.cond(
+    MyState.count > 5,
+    rx.text("High"),
+    rx.text("Low"),
+)
+
+# ✅ rx.foreach for iteration
+rx.foreach(MyState.items, lambda item: rx.text(item))
+
+# ❌ Cannot use if statements with state vars
+# if MyState.count > 5:  # Won't work
+#     return rx.text("High")
+
+# ❌ Cannot use for loops over state vars
+# for item in MyState.items:  # Won't work
+#     return rx.text(item)
+
+# ❌ Cannot use Python operations on state vars
+# len(MyState.items)  # Won't work - use MyState.items.length()
+```
+
+## Data Modeling
+
+### rx.Base for Custom Classes
+- Use `rx.Base` for all custom data classes in state
+- Enables type-safe data structures
+- Allows mixed types in collections
+- Required for state variable type validation
+
+```python
+class User(rx.Base):
+    """User data model"""
+    name: str
+    email: str
+    age: int = 0
+    is_active: bool = True
+
+class AppState(rx.State):
+    users: list[User] = []
+    current_user: User | None = None
+    
+    @rx.event
+    def add_user(self, form_data: dict):
+        """Add user from form data"""
+        self.users.append(User(**form_data))
+```
+
+## Forms & Tables
+
+### Form Pattern
+
+```python
+def user_form():
+    return rx.form(
+        rx.vstack(
+            rx.input(
+                placeholder="Name",
+                name="name",
+                required=True,
+            ),
+            rx.input(
+                placeholder="Email",
+                name="email",
+                type="email",
+                required=True,
+            ),
+            rx.select(
+                ["Option1", "Option2"],
+                placeholder="Select...",
+                name="category",
+                required=True,
+            ),
+            rx.button("Submit", type="submit"),
+            spacing="4",
+        ),
+        on_submit=AppState.handle_form,  # Receives dict
+    )
+```
+
+### Table Pattern
+
+```python
+def show_user(user: User):
+    """Render function for table row"""
+    return rx.table.row(
+        rx.table.cell(user.name),
+        rx.table.cell(user.email),
+        rx.table.cell(user.age),
+    )
+
+def user_table():
+    return rx.table.root(
+        rx.table.header(
+            rx.table.row(
+                rx.table.column_header_cell("Name"),
+                rx.table.column_header_cell("Email"),
+                rx.table.column_header_cell("Age"),
+            )
+        ),
+        rx.table.body(
+            rx.foreach(AppState.users, show_user)
+        ),
+        variant="surface",
+        size="3",
+    )
+```
+
+## Layout Components
+
+```python
+# Vertical stacking
+rx.vstack(
+    child1,
+    child2,
+    spacing="4",
+    padding="4",
+)
+
+# Horizontal layout
+rx.hstack(
+    child1,
+    child2,
+    spacing="4",
+)
+
+# Container with max width
+rx.container(
+    content,
+    max_width="1200px",
+)
+
+# Centered content
+rx.center(
+    content,
+    height="100vh",
+)
+```
+
+## Routing & Pages
+
+```python
+import reflex as rx
+
+def index():
+    return rx.text("Home Page")
+
+def about():
+    return rx.text("About Page")
+
+def dashboard():
+    return rx.text("Dashboard")
+
+app = rx.App()
+app.add_page(index, route="/")
+app.add_page(about, route="/about", title="About Us")
+app.add_page(dashboard, route="/dashboard", title="Dashboard")
+```
+
+## Assets & Static Files
+
+- Place files in `assets/` directory
+- Access at root URL path: `assets/logo.png` → `/logo.png`
+- Supported: images, fonts, icons, CSS files
+
+```python
+# Using assets
+rx.image(src="/logo.png")
+rx.link("Download", href="/file.pdf")
+```
+
+## Best Practices
+
+### Component Design
+- Keep components small and focused (single responsibility)
+- Use descriptive component names (verbs for actions, nouns for UI)
+- Extract reusable logic into separate component functions
+- Apply consistent spacing and padding values
+
+### State Design
+- Minimize state variables (only what changes)
+- Use boolean flags for UI state (`is_loading`, `has_error`)
+- Group related state into data classes using `rx.Base`
+- Keep event handlers focused and single-purpose
+
+### Performance
+- Use `yield` in event handlers for long operations
+- Minimize state updates (batch when possible)
+- Leverage var operations over Python operations in components
+- Use conditional rendering (`rx.cond`) efficiently
+
+### Code Organization
+
+**Small Apps**: Single file
+```python
+# app_name.py
+import reflex as rx
+
+class State(rx.State):
+    count: int = 0
+    
+    @rx.event
+    def increment(self):
+        self.count += 1
+
+def index():
+    return rx.vstack(
+        rx.text(f"Count: {State.count}"),
+        rx.button("Increment", on_click=State.increment),
+    )
+
+app = rx.App()
+app.add_page(index)
+```
+
+**Medium Apps**: Separate files for pages, components, state
+```python
+# app_name/state.py
+class AppState(rx.State):
+    ...
+
+# app_name/components.py
+def navbar():
+    ...
+
+# app_name/pages/index.py
+def index():
+    ...
+
+# app_name/app_name.py
+from .pages import index
+app = rx.App()
+app.add_page(index)
+```
+
+**Large Apps**: Modular structure with feature directories
+
+## Common Patterns
+
+### Conditional Rendering
+```python
+# Loading state
+rx.cond(
+    AppState.is_loading,
+    rx.spinner(),
+    rx.text("Content loaded"),
+)
+
+# Authentication
+rx.cond(
+    AppState.is_logged_in,
+    dashboard_view(),
+    login_view(),
+)
+```
+
+### List Rendering with Dynamic Data
+```python
+# Simple list
+rx.foreach(AppState.items, lambda item: rx.text(item))
+
+# Complex list with components
+rx.foreach(
+    AppState.users,
+    lambda user: rx.card(
+        rx.heading(user.name),
+        rx.text(user.email),
+    )
+)
+```
+
+### Form Submission & Validation
+```python
+class FormState(rx.State):
+    error_message: str = ""
+    
+    @rx.event
+    def submit_form(self, form_data: dict):
+        # Validation
+        if not form_data.get("email"):
+            self.error_message = "Email required"
+            return
+        
+        # Process data
+        self.process_data(form_data)
+        self.error_message = ""
+
+def form_with_validation():
+    return rx.vstack(
+        rx.form(
+            rx.input(name="email", placeholder="Email"),
+            rx.button("Submit", type="submit"),
+            on_submit=FormState.submit_form,
+        ),
+        rx.cond(
+            FormState.error_message != "",
+            rx.text(FormState.error_message, color="red"),
+        ),
+    )
+```
+
+## Development Workflow
+
+### Iterative Building (4-Stage Approach)
+1. **Layout**: Define grid, flex, containers, responsive structure
+2. **Components**: Add UI elements (tables, forms, buttons, charts)
+3. **State**: Implement state management and event handlers
+4. **Refinement**: Polish styling, handle edge cases, optimize
+
+### Planning Checklist
+- Define core purpose and key features (3-5 max)
+- Structure data models using `rx.Base`
+- Start with most important page/workflow
+- Gather visual references (wireframes, mockups)
+- Break large tasks into small, focused steps
+
+### Styling Guidelines
+- Use specific values: `"280px"`, `"24px"`, `"#3B82F6"`
+- Avoid vague terms: "modern", "clean", "nice"
+- Apply consistent spacing: `"4"`, `"6"`, `"8"` (4px increments)
+- Use border conventions: `"1px solid gray"`, `"8px"` radius
+
+## Configuration
+
+### rxconfig.py
+```python
+import reflex as rx
+
+config = rx.Config(
+    app_name="my_app",
+    db_url="sqlite:///reflex.db",
+    env=rx.Env.DEV,
+)
+```
+
+## Testing
+
+```python
+# Test event handlers
+def test_increment():
+    state = MyState()
+    state.increment()
+    assert state.count == 1
+
+# Test with form data
+def test_form_handler():
+    state = FormState()
+    state.submit_form({"name": "John", "email": "john@example.com"})
+    assert len(state.users) == 1
+```
+
+## Common Mistakes to Avoid
+
+- ❌ Using if/for statements with state vars in components
+- ❌ Modifying state directly (always use event handlers)
+- ❌ Forgetting type annotations on state variables
+- ❌ Using Python len(), min(), max() on state vars (use var operations)
+- ❌ Editing `.web/` directory manually
+- ❌ Forgetting `yield` in long-running event handlers
+- ❌ Mismatching event handler arguments with event triggers
+
+## Integration Capabilities
+
+- Any Python library in event handlers (requests, pandas, openai)
+- Database integration (SQLAlchemy, asyncpg)
+- API integration (REST, GraphQL)
+- Third-party React components
+- File uploads and downloads
+- WebSockets for real-time features
+
+## Deployment
+
+```bash
+reflex deploy  # Deploy to Reflex Cloud
+```
+
+## Key Conventions
+
+1. Use `rx.Base` for all custom data classes
+2. Always type annotate state variables
+3. Event handlers are the only way to modify state
+4. Use `rx.cond` and `rx.foreach` instead of Python control flow
+5. Use var operations for state var manipulation in components
+6. Apply consistent naming: snake_case files/functions, PascalCase classes
+7. Organize by feature for large apps, by type for small apps
+8. Keep components pure and focused
+9. Leverage built-in components before custom solutions
+10. Use `yield` for responsive UI during async operations

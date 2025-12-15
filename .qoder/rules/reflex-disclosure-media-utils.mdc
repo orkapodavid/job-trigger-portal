@@ -1,0 +1,843 @@
+---
+description: Expert guide for Reflex Disclosure components (Accordion, Tabs, Segmented Control), Media components (Image, Video, Audio), and Other utility components
+globs:
+  - "**/*.py"
+---
+
+# Reflex Disclosure, Media, and Utility Components Expert
+
+You are an expert in Reflex's Disclosure components for organizing content, Media components for multimedia, and utility components for specialized functionality.
+
+## Disclosure Components
+
+### Accordion Component (`rx.accordion`)
+
+**Purpose**: Collapsible content sections
+
+**Structure**:
+- `rx.accordion.root`: Container
+- `rx.accordion.item`: Individual accordion item
+- `rx.accordion.trigger`: Clickable header
+- `rx.accordion.content`: Collapsible content
+
+**Key Properties**:
+- `type`: "single" | "multiple" (single or multiple panels open)
+- `collapsible`: bool - Allow closing all panels
+- `default_value`: Initially open item(s)
+- `value`: Controlled open items
+
+**Best Practices**:
+
+#### Simple Accordion
+```python
+rx.accordion.root(
+    rx.accordion.item(
+        rx.accordion.trigger("What is Reflex?"),
+        rx.accordion.content(
+            "Reflex is a Python framework for building full-stack web apps."
+        ),
+        value="item-1"
+    ),
+    rx.accordion.item(
+        rx.accordion.trigger("How do I install it?"),
+        rx.accordion.content(
+            "Run: pip install reflex"
+        ),
+        value="item-2"
+    ),
+    rx.accordion.item(
+        rx.accordion.trigger("Is it free?"),
+        rx.accordion.content(
+            "Yes, Reflex is open source and free to use."
+        ),
+        value="item-3"
+    ),
+    type="single",
+    collapsible=True
+)
+```
+
+#### Multiple Open Panels
+```python
+rx.accordion.root(
+    rx.accordion.item(
+        rx.accordion.trigger("Section 1"),
+        rx.accordion.content("Content for section 1"),
+        value="1"
+    ),
+    rx.accordion.item(
+        rx.accordion.trigger("Section 2"),
+        rx.accordion.content("Content for section 2"),
+        value="2"
+    ),
+    rx.accordion.item(
+        rx.accordion.trigger("Section 3"),
+        rx.accordion.content("Content for section 3"),
+        value="3"
+    ),
+    type="multiple",  # Allow multiple panels open
+    default_value=["1", "2"]  # Initially open
+)
+```
+
+#### Controlled Accordion
+```python
+class AccordionState(rx.State):
+    open_items: list[str] = ["1"]
+    
+    def handle_change(self, items: list[str]):
+        self.open_items = items
+
+rx.accordion.root(
+    rx.accordion.item(
+        rx.accordion.trigger("Item 1"),
+        rx.accordion.content("Content 1"),
+        value="1"
+    ),
+    rx.accordion.item(
+        rx.accordion.trigger("Item 2"),
+        rx.accordion.content("Content 2"),
+        value="2"
+    ),
+    type="multiple",
+    value=AccordionState.open_items,
+    on_value_change=AccordionState.handle_change
+)
+```
+
+#### FAQ Accordion
+```python
+class FAQState(rx.State):
+    faqs: list[dict] = [
+        {
+            "question": "What is your return policy?",
+            "answer": "We accept returns within 30 days of purchase."
+        },
+        {
+            "question": "Do you ship internationally?",
+            "answer": "Yes, we ship to over 100 countries worldwide."
+        },
+        {
+            "question": "How long does shipping take?",
+            "answer": "Standard shipping takes 5-7 business days."
+        }
+    ]
+
+rx.vstack(
+    rx.heading("Frequently Asked Questions", size="7"),
+    rx.accordion.root(
+        rx.foreach(
+            FAQState.faqs,
+            lambda faq, idx: rx.accordion.item(
+                rx.accordion.trigger(
+                    rx.heading(faq["question"], size="3")
+                ),
+                rx.accordion.content(
+                    rx.text(faq["answer"])
+                ),
+                value=str(idx)
+            )
+        ),
+        type="single",
+        collapsible=True,
+        width="100%"
+    ),
+    spacing="4",
+    width="100%",
+    max_width="800px"
+)
+```
+
+### Tabs Component (`rx.tabs`)
+
+**Purpose**: Organize content into tabbed panels
+
+**Structure**:
+- `rx.tabs.root`: Container
+- `rx.tabs.list`: Tab navigation
+- `rx.tabs.trigger`: Individual tab button
+- `rx.tabs.content`: Tab panel content
+
+**Key Properties**:
+- `default_value`: Initially active tab
+- `value`: Controlled active tab
+- `orientation`: "horizontal" | "vertical"
+
+**Best Practices**:
+
+#### Simple Tabs
+```python
+rx.tabs.root(
+    rx.tabs.list(
+        rx.tabs.trigger("Overview", value="tab1"),
+        rx.tabs.trigger("Details", value="tab2"),
+        rx.tabs.trigger("Settings", value="tab3")
+    ),
+    rx.tabs.content(
+        rx.text("Overview content goes here."),
+        value="tab1"
+    ),
+    rx.tabs.content(
+        rx.text("Details content goes here."),
+        value="tab2"
+    ),
+    rx.tabs.content(
+        rx.text("Settings content goes here."),
+        value="tab3"
+    ),
+    default_value="tab1"
+)
+```
+
+#### Controlled Tabs
+```python
+class TabsState(rx.State):
+    active_tab: str = "home"
+
+rx.tabs.root(
+    rx.tabs.list(
+        rx.tabs.trigger("Home", value="home"),
+        rx.tabs.trigger("Profile", value="profile"),
+        rx.tabs.trigger("Messages", value="messages")
+    ),
+    rx.tabs.content(
+        rx.vstack(
+            rx.heading("Home"),
+            rx.text("Welcome to your dashboard"),
+            spacing="2"
+        ),
+        value="home"
+    ),
+    rx.tabs.content(
+        rx.vstack(
+            rx.heading("Profile"),
+            rx.text("Your profile information"),
+            spacing="2"
+        ),
+        value="profile"
+    ),
+    rx.tabs.content(
+        rx.vstack(
+            rx.heading("Messages"),
+            rx.text("Your messages"),
+            spacing="2"
+        ),
+        value="messages"
+    ),
+    value=TabsState.active_tab,
+    on_change=TabsState.set_active_tab
+)
+```
+
+#### Vertical Tabs
+```python
+rx.tabs.root(
+    rx.hstack(
+        rx.tabs.list(
+            rx.tabs.trigger("Account", value="account"),
+            rx.tabs.trigger("Security", value="security"),
+            rx.tabs.trigger("Notifications", value="notifications"),
+            orientation="vertical"
+        ),
+        rx.box(
+            rx.tabs.content(
+                rx.vstack(
+                    rx.heading("Account Settings"),
+                    rx.text("Manage your account"),
+                    spacing="2"
+                ),
+                value="account"
+            ),
+            rx.tabs.content(
+                rx.vstack(
+                    rx.heading("Security Settings"),
+                    rx.text("Manage your security"),
+                    spacing="2"
+                ),
+                value="security"
+            ),
+            rx.tabs.content(
+                rx.vstack(
+                    rx.heading("Notification Settings"),
+                    rx.text("Manage your notifications"),
+                    spacing="2"
+                ),
+                value="notifications"
+            ),
+            flex="1"
+        ),
+        spacing="4",
+        width="100%"
+    ),
+    orientation="vertical",
+    default_value="account"
+)
+```
+
+#### Dashboard Tabs
+```python
+rx.card(
+    rx.tabs.root(
+        rx.tabs.list(
+            rx.tabs.trigger(
+                rx.icon("bar-chart"),
+                "Analytics",
+                value="analytics"
+            ),
+            rx.tabs.trigger(
+                rx.icon("users"),
+                "Users",
+                value="users"
+            ),
+            rx.tabs.trigger(
+                rx.icon("settings"),
+                "Settings",
+                value="settings"
+            )
+        ),
+        rx.tabs.content(
+            rx.vstack(
+                rx.heading("Analytics Dashboard", size="5"),
+                rx.recharts.line_chart(
+                    rx.recharts.line(data_key="value"),
+                    rx.recharts.x_axis(data_key="date"),
+                    rx.recharts.y_axis(),
+                    data=State.analytics_data,
+                    width="100%",
+                    height=300
+                ),
+                spacing="4",
+                width="100%"
+            ),
+            value="analytics"
+        ),
+        rx.tabs.content(
+            rx.vstack(
+                rx.heading("User Management", size="5"),
+                rx.table.root(
+                    # User table here
+                ),
+                spacing="4",
+                width="100%"
+            ),
+            value="users"
+        ),
+        rx.tabs.content(
+            rx.vstack(
+                rx.heading("Settings", size="5"),
+                # Settings form here
+                spacing="4",
+                width="100%"
+            ),
+            value="settings"
+        ),
+        default_value="analytics",
+        width="100%"
+    ),
+    width="100%"
+)
+```
+
+### Segmented Control (`rx.segmented_control`)
+
+**Purpose**: Toggle between multiple options (like radio buttons but styled as buttons)
+
+**Structure**:
+- `rx.segmented_control.root`: Container
+- `rx.segmented_control.item`: Individual option
+
+**Best Practices**:
+
+#### Simple Segmented Control
+```python
+class SegmentedState(rx.State):
+    view_mode: str = "grid"
+
+rx.segmented_control.root(
+    rx.segmented_control.item("Grid", value="grid"),
+    rx.segmented_control.item("List", value="list"),
+    rx.segmented_control.item("Compact", value="compact"),
+    value=SegmentedState.view_mode,
+    on_change=SegmentedState.set_view_mode
+)
+```
+
+#### With Icons
+```python
+rx.segmented_control.root(
+    rx.segmented_control.item(
+        rx.icon("grid"),
+        value="grid"
+    ),
+    rx.segmented_control.item(
+        rx.icon("list"),
+        value="list"
+    ),
+    rx.segmented_control.item(
+        rx.icon("columns"),
+        value="columns"
+    ),
+    value=State.layout,
+    on_change=State.set_layout
+)
+```
+
+## Media Components
+
+### Image Component (`rx.image`)
+
+**Purpose**: Display images
+
+**Key Properties**:
+- `src`: Image URL or path
+- `alt`: Alternative text (accessibility)
+- `width`: Image width
+- `height`: Image height
+- `loading`: "eager" | "lazy"
+- `object_fit`: "contain" | "cover" | "fill" | "none" | "scale-down"
+
+**Best Practices**:
+
+#### Basic Image
+```python
+rx.image(
+    src="/logo.png",
+    alt="Company Logo",
+    width="200px",
+    height="auto"
+)
+```
+
+#### Responsive Image
+```python
+rx.image(
+    src="/hero.jpg",
+    alt="Hero Image",
+    width="100%",
+    height="auto",
+    object_fit="cover"
+)
+```
+
+#### Image with Aspect Ratio
+```python
+rx.aspect_ratio(
+    rx.image(
+        src="/product.jpg",
+        alt="Product Image",
+        object_fit="cover"
+    ),
+    ratio=16/9
+)
+```
+
+#### Image Gallery
+```python
+rx.grid(
+    rx.foreach(
+        State.images,
+        lambda img: rx.aspect_ratio(
+            rx.image(
+                src=img.url,
+                alt=img.title,
+                object_fit="cover",
+                loading="lazy"
+            ),
+            ratio=1  # Square
+        )
+    ),
+    columns="4",
+    spacing="2"
+)
+```
+
+#### Avatar Images
+```python
+rx.avatar(
+    src=user.avatar_url,
+    fallback=user.initials,
+    size="6"
+)
+```
+
+### Video Component (`rx.video`)
+
+**Purpose**: Embed video players
+
+**Key Properties**:
+- `src`: Video URL
+- `controls`: bool - Show player controls
+- `autoplay`: bool - Auto-play video
+- `loop`: bool - Loop video
+- `muted`: bool - Mute audio
+- `poster`: Poster image URL
+
+**Best Practices**:
+
+#### Basic Video
+```python
+rx.video(
+    src="/video.mp4",
+    controls=True,
+    width="100%"
+)
+```
+
+#### Video with Poster
+```python
+rx.video(
+    src="/intro.mp4",
+    poster="/intro-poster.jpg",
+    controls=True,
+    width="100%",
+    height="auto"
+)
+```
+
+#### Background Video
+```python
+rx.box(
+    rx.video(
+        src="/background.mp4",
+        autoplay=True,
+        loop=True,
+        muted=True,
+        width="100%",
+        height="100%",
+        object_fit="cover"
+    ),
+    rx.center(
+        rx.vstack(
+            rx.heading("Welcome", size="9", color="white"),
+            rx.text("Hero section with video background", color="white"),
+            spacing="2"
+        ),
+        position="absolute",
+        top="0",
+        left="0",
+        width="100%",
+        height="100%"
+    ),
+    position="relative",
+    height="500px",
+    overflow="hidden"
+)
+```
+
+#### Video in Aspect Ratio
+```python
+rx.aspect_ratio(
+    rx.video(
+        src="/tutorial.mp4",
+        controls=True
+    ),
+    ratio=16/9
+)
+```
+
+### Audio Component (`rx.audio`)
+
+**Purpose**: Audio player
+
+**Key Properties**:
+- `src`: Audio URL
+- `controls`: bool - Show audio controls
+- `autoplay`: bool
+- `loop`: bool
+
+**Best Practices**:
+
+#### Basic Audio Player
+```python
+rx.audio(
+    src="/podcast.mp3",
+    controls=True
+)
+```
+
+#### Audio with Custom Controls
+```python
+class AudioState(rx.State):
+    is_playing: bool = False
+    
+    def toggle_play(self):
+        self.is_playing = not self.is_playing
+
+rx.vstack(
+    rx.audio(
+        src=State.audio_url,
+        id="audio-player"
+    ),
+    rx.button(
+        rx.cond(
+            AudioState.is_playing,
+            rx.icon("pause"),
+            rx.icon("play")
+        ),
+        on_click=AudioState.toggle_play
+    ),
+    spacing="2"
+)
+```
+
+## Other Utility Components
+
+### Clipboard Component (`rx.clipboard`)
+
+**Purpose**: Copy text to clipboard
+
+**Best Practices**:
+
+#### Copy Button
+```python
+rx.hstack(
+    rx.code("npm install reflex"),
+    rx.button(
+        rx.icon("copy"),
+        on_click=rx.set_clipboard("npm install reflex")
+    ),
+    spacing="2"
+)
+```
+
+#### Copy Code Block
+```python
+class ClipboardState(rx.State):
+    code: str = "def hello():\n    print('Hello, World!')"
+
+rx.vstack(
+    rx.code_block(
+        ClipboardState.code,
+        language="python"
+    ),
+    rx.button(
+        "Copy Code",
+        on_click=rx.set_clipboard(ClipboardState.code)
+    ),
+    spacing="2"
+)
+```
+
+### HTML Component (`rx.html`)
+
+**Purpose**: Render raw HTML
+
+**Best Practices**:
+
+#### Safe HTML Rendering
+```python
+rx.html("<p>This is <strong>HTML</strong> content.</p>")
+```
+
+#### Dynamic HTML
+```python
+class HTMLState(rx.State):
+    html_content: str = "<div>Dynamic content</div>"
+
+rx.html(HTMLState.html_content)
+```
+
+### Script Component (`rx.script`)
+
+**Purpose**: Add custom JavaScript
+
+**Best Practices**:
+
+#### Inline Script
+```python
+rx.script(
+    """
+    console.log('Page loaded');
+    """
+)
+```
+
+#### External Script
+```python
+rx.script(src="https://cdn.example.com/library.js")
+```
+
+### Skeleton Component (`rx.skeleton`)
+
+**Purpose**: Loading placeholder
+
+**Best Practices**:
+
+#### Loading State
+```python
+rx.cond(
+    State.is_loading,
+    rx.vstack(
+        rx.skeleton(height="20px", width="100%"),
+        rx.skeleton(height="20px", width="80%"),
+        rx.skeleton(height="20px", width="90%"),
+        spacing="2"
+    ),
+    rx.text(State.content)
+)
+```
+
+#### Card Skeleton
+```python
+rx.cond(
+    State.loading,
+    rx.card(
+        rx.vstack(
+            rx.skeleton(height="200px", width="100%"),
+            rx.skeleton(height="24px", width="60%"),
+            rx.skeleton(height="16px", width="100%"),
+            rx.skeleton(height="16px", width="80%"),
+            spacing="3"
+        )
+    ),
+    rx.card(
+        # Actual content
+    )
+)
+```
+
+### Memo Component (`rx.memo`)
+
+**Purpose**: Performance optimization - memoize component rendering
+
+**Best Practices**:
+
+#### Memoized Expensive Component
+```python
+@rx.memo
+def expensive_component(data: list):
+    # Complex rendering logic
+    return rx.vstack(
+        rx.foreach(data, lambda item: rx.card(item))
+    )
+
+# Component only re-renders when data changes
+expensive_component(State.data)
+```
+
+### Theme Component (`rx.theme`)
+
+**Purpose**: Configure application theme
+
+**Best Practices**:
+
+#### App with Theme
+```python
+def index():
+    return rx.theme(
+        rx.vstack(
+            rx.heading("My App"),
+            rx.text("Content here"),
+            spacing="4"
+        ),
+        accent_color="blue",
+        gray_color="slate",
+        radius="large",
+        scaling="100%"
+    )
+```
+
+## Common Patterns
+
+### Content Organization with Disclosure
+```python
+rx.vstack(
+    rx.heading("Help Center", size="8"),
+    rx.tabs.root(
+        rx.tabs.list(
+            rx.tabs.trigger("Getting Started", value="start"),
+            rx.tabs.trigger("FAQs", value="faq"),
+            rx.tabs.trigger("Guides", value="guides")
+        ),
+        rx.tabs.content(
+            rx.text("Getting started content..."),
+            value="start"
+        ),
+        rx.tabs.content(
+            rx.accordion.root(
+                # FAQ accordion items
+                type="single",
+                collapsible=True
+            ),
+            value="faq"
+        ),
+        rx.tabs.content(
+            rx.text("Guides content..."),
+            value="guides"
+        ),
+        default_value="start"
+    ),
+    spacing="4",
+    width="100%"
+)
+```
+
+### Media Gallery
+```python
+rx.grid(
+    rx.foreach(
+        State.gallery_items,
+        lambda item: rx.card(
+            rx.vstack(
+                rx.aspect_ratio(
+                    rx.cond(
+                        item.type == "image",
+                        rx.image(src=item.url, alt=item.title),
+                        rx.video(src=item.url, controls=True, poster=item.poster)
+                    ),
+                    ratio=16/9
+                ),
+                rx.heading(item.title, size="3"),
+                rx.text(item.description, size="2"),
+                spacing="2",
+                align="start"
+            )
+        )
+    ),
+    columns="3",
+    spacing="4"
+)
+```
+
+### Loading States
+```python
+rx.cond(
+    State.is_loading,
+    rx.vstack(
+        rx.skeleton(height="300px", width="100%"),
+        rx.skeleton(height="30px", width="60%"),
+        rx.skeleton(height="20px", width="100%"),
+        rx.skeleton(height="20px", width="80%"),
+        spacing="3"
+    ),
+    rx.vstack(
+        rx.image(src=State.image_url, width="100%"),
+        rx.heading(State.title),
+        rx.text(State.description),
+        spacing="3"
+    )
+)
+```
+
+## Best Practices
+
+1. **Accessibility**: Always provide `alt` text for images
+2. **Lazy Loading**: Use `loading="lazy"` for images below the fold
+3. **Aspect Ratios**: Use `rx.aspect_ratio` for responsive media
+4. **Video Controls**: Always provide controls unless background video
+5. **Disclosure**: Use accordions for FAQs, tabs for related content
+6. **Skeleton Loading**: Match skeleton structure to actual content
+7. **Memoization**: Use `rx.memo` for expensive computations
+8. **Theme Consistency**: Set theme at app level
+9. **Clipboard**: Provide visual feedback after copying
+10. **HTML Safety**: Sanitize user-generated HTML content
+
+## Performance Tips
+
+- Use lazy loading for images
+- Memoize expensive components
+- Optimize video formats and sizes
+- Use appropriate image formats (WebP when possible)
+- Implement skeleton loading for better perceived performance
+- Defer non-critical scripts
+- Use CDN for media assets

@@ -1,0 +1,732 @@
+---
+title: Reflex AG Grid Best Practices
+description: Guidelines for implementing AG Grid in Reflex applications
+tags: [reflex, ag-grid, enterprise, data-grid, tables]
+---
+
+# Reflex AG Grid Best Practices
+
+## Overview
+
+AG Grid is an enterprise-grade data grid component for Reflex that provides powerful features for displaying and interacting with tabular data. This rule file covers best practices for implementing AG Grid in Reflex applications.
+
+## Installation & Setup
+
+### Required Imports
+
+```python
+import reflex as rx
+import reflex_enterprise as rxe
+from reflex_enterprise import ag_grid
+```
+
+### License Key (Enterprise Features)
+
+Set the environment variable for AG Grid Enterprise:
+```bash
+AG_GRID_LICENSE_KEY=your_license_key
+```
+
+## Core AG Grid Principles
+
+### 1. Basic Grid Structure
+
+Every AG Grid requires three essential components:
+
+```python
+ag_grid(
+    id="unique_grid_id",          # REQUIRED: Unique identifier for the grid
+    column_defs=column_defs,      # REQUIRED: List of column definitions
+    row_data=State.data,          # REQUIRED: Data to display (list of dicts)
+    width="100%",
+    height="60vh",
+)
+```
+
+**CRITICAL**: Each grid on a page MUST have a unique `id`. Multiple grids with the same ID will cause rendering issues.
+
+### 2. Data Format
+
+Row data MUST be a list of dictionaries:
+
+```python
+# Correct format
+row_data = [
+    {"name": "Alice", "age": 30, "city": "NYC"},
+    {"name": "Bob", "age": 25, "city": "LA"},
+]
+
+# State variable
+class State(rx.State):
+    data: list[dict] = []
+```
+
+## Column Definitions
+
+### Basic Column Definition
+
+Use `ag_grid.column_def()` to define columns:
+
+```python
+column_defs = [
+    ag_grid.column_def(
+        field="column_name",              # Maps to dict key in row_data
+        header_name="Display Name",       # Optional: Custom header text
+        filter=ag_grid.filters.text,      # Optional: Enable filtering
+        sortable=True,                    # Optional: Enable sorting (default: True)
+        editable=False,                   # Optional: Enable editing (default: False)
+        hide=False,                       # Optional: Hide column
+        checkbox_selection=False,         # Optional: Add checkbox for row selection
+    ),
+]
+```
+
+### Key Column Definition Properties
+
+- **field**: Maps to the dictionary key in row_data (snake_case)
+- **header_name**: Custom display name (defaults to capitalized field name)
+- **col_id**: Unique column ID (defaults to field name)
+- **type**: Column type specification
+- **hide**: Boolean to hide column
+- **width**: Fixed column width
+- **min_width**: Minimum column width
+- **max_width**: Maximum column width
+
+### Default Column Definition
+
+Set default properties for ALL columns:
+
+```python
+ag_grid(
+    id="grid_id",
+    column_defs=column_defs,
+    row_data=State.data,
+    default_col_def=ag_grid.column_def(
+        sortable=True,
+        filter=True,
+        resizable=True,
+    ),
+)
+```
+
+## Filtering
+
+### Filter Types
+
+AG Grid provides typed filters to ensure correct input:
+
+```python
+column_defs = [
+    ag_grid.column_def(field="name", filter=ag_grid.filters.text),
+    ag_grid.column_def(field="age", filter=ag_grid.filters.number),
+    ag_grid.column_def(field="date", filter=ag_grid.filters.date),
+    ag_grid.column_def(field="active", filter=True),  # Default filter
+]
+
+# Enterprise only:
+# ag_grid.filters.set
+# ag_grid.filters.multi
+```
+
+### Floating Filters
+
+Enable floating filters for quick filtering:
+
+```python
+ag_grid.column_def(
+    field="name",
+    filter=ag_grid.filters.text,
+    floating_filter=True,  # Shows filter input below header
+)
+```
+
+## Row Selection
+
+### Single and Multiple Selection
+
+```python
+# Multiple row selection with checkboxes
+ag_grid(
+    id="selection_grid",
+    column_defs=[
+        ag_grid.column_def(
+            field="name",
+            checkbox_selection=True,  # Add checkbox to first column
+        ),
+        # ... other columns
+    ],
+    row_data=State.data,
+    row_selection="multiple",  # "single" or "multiple"
+    on_selection_changed=State.handle_selection,
+)
+```
+
+### Selection Event Handler
+
+```python
+class State(rx.State):
+    selected_rows: list[dict] | None = None
+    
+    def handle_selection(self, selected_rows, _, __):
+        """Handle row selection changes.
+        
+        Args:
+            selected_rows: List of selected row dictionaries
+            _: Context (usually not needed)
+            __: Additional info (usually not needed)
+        """
+        self.selected_rows = selected_rows
+        # Process selected rows
+```
+
+## Cell Selection
+
+### Enable Range Selection
+
+```python
+ag_grid(
+    id="cell_grid",
+    column_defs=column_defs,
+    row_data=State.data,
+    cell_selection=True,  # Enable cell/range selection
+    on_cell_selection_changed=State.handle_cell_selection,
+)
+```
+
+### Fill Handle (Drag to Fill)
+
+```python
+ag_grid(
+    id="fill_grid",
+    column_defs=column_defs,
+    row_data=State.data,
+    cell_selection={"handle": {"mode": "fill"}},
+    enable_cell_text_selection=True,  # Allow text selection within cells
+    on_cell_value_changed=State.handle_cell_change,
+)
+```
+
+## Editing
+
+### Cell Editors
+
+Available editors:
+
+```python
+column_defs = [
+    ag_grid.column_def(
+        field="name",
+        editable=True,
+        cell_editor=ag_grid.editors.text,
+    ),
+    ag_grid.column_def(
+        field="description",
+        editable=True,
+        cell_editor=ag_grid.editors.large_text,
+    ),
+    ag_grid.column_def(
+        field="age",
+        editable=True,
+        cell_editor=ag_grid.editors.number,
+    ),
+    ag_grid.column_def(
+        field="category",
+        editable=True,
+        cell_editor=ag_grid.editors.select,
+        cell_editor_params={"values": ["A", "B", "C"]},
+    ),
+    ag_grid.column_def(
+        field="date",
+        editable=True,
+        cell_editor=ag_grid.editors.date,
+    ),
+    ag_grid.column_def(
+        field="active",
+        editable=True,
+        cell_editor=ag_grid.editors.checkbox,
+    ),
+]
+```
+
+### Handle Cell Value Changes
+
+```python
+class State(rx.State):
+    data: list[dict] = []
+    
+    def handle_cell_change(self, row, col_id, new_value, old_value, _):
+        """Handle cell value changes.
+        
+        Args:
+            row: The row data dictionary
+            col_id: Column identifier
+            new_value: New cell value
+            old_value: Previous cell value
+            _: Additional context
+        """
+        # Update data
+        for item in self.data:
+            if item["id"] == row["id"]:
+                item[col_id] = new_value
+                break
+```
+
+## Pagination
+
+```python
+ag_grid(
+    id="paginated_grid",
+    column_defs=column_defs,
+    row_data=State.data,
+    pagination=True,
+    pagination_page_size=20,
+    pagination_page_size_selector=[10, 20, 50, 100],
+)
+```
+
+## Themes
+
+Available themes: `quartz` (default), `alpine`, `balham`, `material`
+
+```python
+class State(rx.State):
+    grid_theme: str = "quartz"
+    themes: list[str] = ["quartz", "balham", "alpine", "material"]
+
+ag_grid(
+    id="themed_grid",
+    column_defs=column_defs,
+    row_data=State.data,
+    theme=State.grid_theme,  # Dynamic theme from state
+)
+```
+
+**Note**: Only the old AG Grid theme API is currently supported.
+
+## Value Transformers
+
+### Value Getter
+
+Compute values from other columns:
+
+```python
+ag_grid.column_def(
+    field="total",
+    header_name="Total",
+    value_getter="data.price * data.quantity",  # JavaScript expression
+)
+```
+
+### Value Formatter
+
+Format display values:
+
+```python
+ag_grid.column_def(
+    field="price",
+    header_name="Price",
+    value_formatter="'$' + value.toFixed(2)",  # JavaScript expression
+)
+```
+
+## AG Grid API
+
+### Creating API Instance
+
+```python
+# Create API instance with same ID as grid
+grid_api = ag_grid.api("unique_grid_id")
+
+# Use in event handlers
+rx.button(
+    "Select All",
+    on_click=grid_api.select_all(),
+)
+
+rx.button(
+    "Deselect All",
+    on_click=grid_api.deselect_all(),
+)
+
+rx.button(
+    "Export CSV",
+    on_click=grid_api.export_data_as_csv(),
+)
+
+rx.button(
+    "Resize Columns",
+    on_click=grid_api.size_columns_to_fit(),
+)
+```
+
+### API Methods Returning Values
+
+For methods that return values, handle them in state:
+
+```python
+class State(rx.State):
+    csv_data: str = ""
+    
+    def get_csv_data(self):
+        # This pattern works for methods with return values
+        self.csv_data = yield grid_api.get_data_as_csv()
+```
+
+## Model Wrapper (Database Integration)
+
+### Default Model Wrapper
+
+```python
+from reflex_enterprise import model_wrapper
+
+class MyModel(rx.Model):
+    name: str
+    age: int
+
+class State(rx.State):
+    my_wrapper = model_wrapper(MyModel)
+
+ag_grid(
+    id="db_grid",
+    **State.my_wrapper,  # Unpacks column_defs, row_data, etc.
+)
+```
+
+### SSRM Model Wrapper (Server-Side Row Model)
+
+```python
+from reflex_enterprise import model_wrapper_ssrm
+
+class State(rx.State):
+    my_wrapper = model_wrapper_ssrm(MyModel)
+
+ag_grid(
+    id="ssrm_grid",
+    **State.my_wrapper,
+)
+```
+
+### Custom Model Wrapper
+
+```python
+from reflex_enterprise import ModelWrapper
+
+class CustomWrapper(ModelWrapper):
+    def _get_columns_defs(self):
+        # Custom column definitions
+        return [...]
+    
+    def _get_data(self):
+        # Custom data fetching
+        return [...]
+    
+    def _row_count(self):
+        # Custom row count
+        return 0
+    
+    def on_value_setter(self, row, col_id, value):
+        # Custom update logic
+        pass
+```
+
+## Pivot Mode (Enterprise)
+
+```python
+column_defs = [
+    ag_grid.column_def(
+        field="country",
+        row_group=True,  # Group rows by this column
+    ),
+    ag_grid.column_def(
+        field="year",
+        pivot=True,  # Pivot on this column
+    ),
+    ag_grid.column_def(
+        field="value",
+        agg_func="sum",  # Aggregation function: sum, min, max, count, avg, first, last
+    ),
+]
+
+ag_grid(
+    id="pivot_grid",
+    column_defs=column_defs,
+    row_data=State.data,
+    pivot_mode=True,
+)
+```
+
+**Note**: Pivot functionality does not work with aligned grids.
+
+## Aligned Grids
+
+Synchronize scrolling across multiple grids:
+
+```python
+ag_grid(
+    id="grid_1",
+    column_defs=column_defs_1,
+    row_data=State.data_1,
+    aligned_grids=["grid_2", "grid_3"],  # List of grid IDs to align with
+)
+
+ag_grid(
+    id="grid_2",
+    column_defs=column_defs_2,
+    row_data=State.data_2,
+    aligned_grids=["grid_1", "grid_3"],
+)
+```
+
+## Common Patterns
+
+### Loading Data from External API
+
+```python
+class State(rx.State):
+    data: list[dict] = []
+    is_loading: bool = False
+    
+    def fetch_data(self):
+        self.is_loading = True
+        # Fetch data from API
+        # Example: yfinance, requests, etc.
+        self.data = fetched_data
+        self.is_loading = False
+
+# In component
+rx.cond(
+    State.is_loading,
+    rx.spinner(),
+    ag_grid(
+        id="data_grid",
+        column_defs=column_defs,
+        row_data=State.data,
+    ),
+)
+```
+
+### Dynamic Column Definitions
+
+```python
+class State(rx.State):
+    show_advanced: bool = False
+    
+    @rx.var
+    def column_defs(self) -> list[dict]:
+        base_cols = [
+            ag_grid.column_def(field="name"),
+            ag_grid.column_def(field="age"),
+        ]
+        
+        if self.show_advanced:
+            base_cols.extend([
+                ag_grid.column_def(field="email"),
+                ag_grid.column_def(field="phone"),
+            ])
+        
+        return base_cols
+
+ag_grid(
+    id="dynamic_grid",
+    column_defs=State.column_defs,
+    row_data=State.data,
+)
+```
+
+### Conditional Row Styling
+
+Use computed variables for row class rules:
+
+```python
+class State(rx.State):
+    @rx.var
+    def row_class_rules(self) -> dict:
+        return {
+            "bg-red-100": "data.status === 'error'",
+            "bg-green-100": "data.status === 'success'",
+        }
+
+ag_grid(
+    id="styled_grid",
+    column_defs=column_defs,
+    row_data=State.data,
+    row_class_rules=State.row_class_rules,
+)
+```
+
+## Best Practices
+
+### 1. Data Management
+
+- ✅ **DO** use `list[dict]` for row_data
+- ✅ **DO** keep data in State for dynamic updates
+- ✅ **DO** use pandas DataFrames for data processing, then convert to list of dicts
+- ❌ **DON'T** pass pandas DataFrames directly to row_data
+- ❌ **DON'T** mutate row_data directly without triggering state update
+
+### 2. Performance
+
+- ✅ **DO** use pagination for large datasets (>1000 rows)
+- ✅ **DO** use SSRM model wrapper for very large datasets
+- ✅ **DO** implement server-side filtering/sorting for huge datasets
+- ❌ **DON'T** load all data at once for very large datasets
+- ❌ **DON'T** update entire dataset when only one row changes
+
+### 3. Column Definitions
+
+- ✅ **DO** use snake_case for field names (Python convention)
+- ✅ **DO** provide explicit header_name for better UX
+- ✅ **DO** use typed filters (ag_grid.filters.number, .text, .date)
+- ✅ **DO** set default_col_def for common properties
+- ❌ **DON'T** use camelCase in Reflex (AG Grid docs use camelCase)
+
+### 4. Event Handlers
+
+- ✅ **DO** use specific event handlers (on_cell_value_changed, on_selection_changed)
+- ✅ **DO** validate data in event handlers before updating state
+- ✅ **DO** provide user feedback (toasts, loading states)
+- ❌ **DON'T** perform heavy computations in event handlers
+- ❌ **DON'T** ignore error handling
+
+### 5. Grid ID
+
+- ✅ **DO** use unique, descriptive IDs for each grid
+- ✅ **DO** use the same ID for ag_grid component and ag_grid.api()
+- ❌ **DON'T** reuse grid IDs on the same page
+- ❌ **DON'T** use dynamic/changing IDs
+
+### 6. Missing Functionality
+
+If AG Grid features aren't working:
+
+- Check browser console for missing module warnings
+- Manually pass modules via `community_modules` or `enterprise_modules` props:
+
+```python
+ag_grid(
+    id="grid_id",
+    column_defs=column_defs,
+    row_data=State.data,
+    community_modules={"ModuleName"},  # set[str]
+    enterprise_modules={"EnterpriseModuleName"},  # set[str]
+)
+```
+
+- Report issues on Reflex Discord or GitHub
+
+### 7. Naming Conventions
+
+- **React (AG Grid Docs)**: camelCase (e.g., `cellEditor`, `rowSelection`)
+- **Reflex**: snake_case (e.g., `cell_editor`, `row_selection`)
+
+**Always convert camelCase from AG Grid docs to snake_case in Reflex.**
+
+## Common Pitfalls
+
+1. **Forgetting unique grid ID**: Each grid must have a unique ID
+2. **Using camelCase**: Reflex uses snake_case, not camelCase
+3. **Direct DataFrame to row_data**: Convert to list of dicts first
+4. **Mutating state without setter**: Use State.set_data() or self.data = new_data
+5. **Missing filter types**: Use typed filters for better UX
+6. **Performance with large datasets**: Use pagination or SSRM
+7. **Event handler signatures**: Check documentation for correct parameters
+
+## Complete Example
+
+```python
+import reflex as rx
+import reflex_enterprise as rxe
+from reflex_enterprise import ag_grid
+import pandas as pd
+
+class DataState(rx.State):
+    data: list[dict] = []
+    selected_rows: list[dict] | None = None
+    grid_theme: str = "quartz"
+    
+    def load_data(self):
+        # Load from DataFrame
+        df = pd.read_csv("data.csv")
+        self.data = df.to_dict(orient="records")
+    
+    def handle_selection(self, selected_rows, _, __):
+        self.selected_rows = selected_rows
+    
+    def handle_cell_change(self, row, col_id, new_value, old_value, _):
+        for item in self.data:
+            if item["id"] == row["id"]:
+                item[col_id] = new_value
+                break
+
+column_defs = [
+    ag_grid.column_def(
+        field="id",
+        header_name="ID",
+        checkbox_selection=True,
+    ),
+    ag_grid.column_def(
+        field="name",
+        header_name="Name",
+        filter=ag_grid.filters.text,
+        editable=True,
+    ),
+    ag_grid.column_def(
+        field="age",
+        header_name="Age",
+        filter=ag_grid.filters.number,
+        editable=True,
+        cell_editor=ag_grid.editors.number,
+    ),
+    ag_grid.column_def(
+        field="date",
+        header_name="Date",
+        filter=ag_grid.filters.date,
+    ),
+]
+
+grid_api = ag_grid.api("my_data_grid")
+
+def index():
+    return rx.vstack(
+        rx.hstack(
+            rx.button("Load Data", on_click=DataState.load_data),
+            rx.button("Export CSV", on_click=grid_api.export_data_as_csv()),
+            rx.select(
+                ["quartz", "balham", "alpine", "material"],
+                value=DataState.grid_theme,
+                on_change=DataState.set_grid_theme,
+            ),
+        ),
+        ag_grid(
+            id="my_data_grid",
+            column_defs=column_defs,
+            row_data=DataState.data,
+            row_selection="multiple",
+            pagination=True,
+            pagination_page_size=20,
+            theme=DataState.grid_theme,
+            on_selection_changed=DataState.handle_selection,
+            on_cell_value_changed=DataState.handle_cell_change,
+            width="100%",
+            height="60vh",
+        ),
+        width="80%",
+        margin="0 auto",
+    )
+
+app = rxe.App()
+app.add_page(index)
+```
+
+## Resources
+
+- [AG Grid Enterprise Docs](https://reflex.dev/docs/enterprise/ag-grid)
+- [Column Definitions](https://reflex.dev/docs/enterprise/ag-grid/column-defs/)
+- [Official AG Grid Docs](https://www.ag-grid.com/react-data-grid/) (Remember to convert camelCase to snake_case)
+- [Reflex Discord](https://discord.gg/reflex-dev) for support
+
+## Version Notes
+
+- Only old AG Grid theme API is supported
+- Some AG Grid features may not be fully tested in Reflex
+- Enterprise features require AG_GRID_LICENSE_KEY environment variable

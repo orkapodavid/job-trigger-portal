@@ -1,0 +1,346 @@
+---
+description: Guide for Reflex App and Config API - application initialization, configuration, and lifecycle management
+globs: ["**/*.py", "**/rxconfig.py"]
+---
+
+# Reflex App Configuration Guide
+
+You are an expert in Reflex App initialization and configuration management.
+
+## Core Principles
+
+- Define the Reflex app in the main module using `rx.App()`
+- Configure runtime settings through `rxconfig.py` in the project root
+- Use environment variables with `REFLEX_` prefix to override config values
+- Leverage app lifecycle methods for proper initialization and cleanup
+
+## App Class (reflex.app.App)
+
+### Essential Fields
+
+```python
+app = rx.App(
+    theme=rx.theme(),  # Global theme for entire app
+    style={},  # Global style dictionary
+    stylesheets=[],  # List of stylesheet URLs
+    reset_style=True,  # CSS reset for margin/padding
+    overlay_component=None,  # Component on every page (default: Connection Error banner)
+    head_components=[],  # Components in <head> of every page
+    html_lang="en",  # Language for html root tag
+    html_custom_attrs={},  # Custom attributes for html tag
+    enable_state=True,  # Enable/disable state management
+)
+```
+
+### Key Methods
+
+**Adding Pages**
+```python
+# Method 1: Using decorator
+@rx.page(route="/", title="Home", on_load=State.load_data)
+def index() -> rx.Component:
+    return rx.container(...)
+
+# Method 2: Using add_page
+app.add_page(
+    component=index,
+    route="/",
+    title="Home",
+    description="Welcome page",
+    image="favicon.ico",
+    on_load=State.load_data,
+    meta=[{"name": "keywords", "content": "reflex, python"}],
+)
+```
+
+**Exception Handling**
+```python
+def custom_frontend_exception_handler(exception: Exception) -> None:
+    """Handle frontend errors"""
+    print(f"Frontend error: {exception}")
+
+def custom_backend_exception_handler(exception: Exception) -> rx.EventSpec | list[rx.EventSpec] | None:
+    """Handle backend errors and return events"""
+    return rx.window_alert(f"Error: {exception}")
+
+app = rx.App(
+    frontend_exception_handler=custom_frontend_exception_handler,
+    backend_exception_handler=custom_backend_exception_handler,
+)
+```
+
+**Modifying State Out of Band**
+```python
+async def background_task():
+    async with app.modify_state(token) as state:
+        state.counter += 1
+```
+
+## Config Class (reflex.config.Config)
+
+### Configuration File Structure
+
+```python
+# rxconfig.py
+import reflex as rx
+
+config = rx.Config(
+    # App Settings
+    app_name="your_app_name",
+    loglevel=rx.LogLevel.INFO,
+    telemetry_enabled=True,
+    
+    # Server Configuration
+    frontend_port=3000,
+    backend_port=8000,
+    frontend_path="",  # e.g., "/app" for http://localhost:3000/app
+    backend_host="0.0.0.0",
+    api_url="http://localhost:8000",
+    deploy_url="http://localhost:3000",
+    cors_allowed_origins=["*"],
+    
+    # Database
+    db_url="sqlite:///reflex.db",
+    async_db_url=None,
+    redis_url=None,
+    
+    # Frontend
+    frontend_packages=["react-icons", "framer-motion"],
+    react_strict_mode=True,
+    
+    # State Management
+    state_manager_mode=rx.StateManagerMode.DISK,  # or REDIS, MEMORY
+    state_auto_setters=None,
+    redis_lock_expiration=10000,
+    redis_token_expiration=3600,
+    
+    # Build Configuration
+    bun_path="/path/to/bun",
+    static_page_generation_timeout=60,
+    
+    # Plugins
+    plugins=[],
+    disable_plugins=[],
+)
+```
+
+### Environment Variable Overrides
+
+All config values can be overridden with environment variables:
+
+```bash
+# Override any config parameter
+export REFLEX_APP_NAME="myapp"
+export REFLEX_FRONTEND_PORT=3001
+export REFLEX_BACKEND_PORT=8001
+export REFLEX_DB_URL="postgresql://user:pass@localhost/db"
+export REFLEX_REDIS_URL="redis://localhost:6379"
+export REFLEX_LOGLEVEL="DEBUG"
+export REFLEX_API_URL="https://api.myapp.com"
+```
+
+### Key Configuration Areas
+
+**Development vs Production**
+```python
+import os
+
+is_production = os.getenv("REFLEX_ENV_MODE") == "prod"
+
+config = rx.Config(
+    app_name="your_app_name",
+    frontend_port=3000 if not is_production else None,
+    backend_port=8000 if not is_production else None,
+    api_url="https://api.yourapp.com" if is_production else "http://localhost:8000",
+    db_url=os.getenv("DATABASE_URL", "sqlite:///reflex.db"),
+)
+```
+
+**State Manager Modes**
+```python
+# DISK mode - stores state on disk (default)
+config = rx.Config(state_manager_mode=rx.StateManagerMode.DISK)
+
+# REDIS mode - stores state in Redis (for scaling)
+config = rx.Config(
+    state_manager_mode=rx.StateManagerMode.REDIS,
+    redis_url="redis://localhost:6379",
+    redis_lock_expiration=10000,
+    redis_token_expiration=3600,
+)
+
+# MEMORY mode - stores state in memory (development only)
+config = rx.Config(state_manager_mode=rx.StateManagerMode.MEMORY)
+```
+
+**Frontend Packages**
+```python
+config = rx.Config(
+    frontend_packages=[
+        "react-icons@^4.11.0",
+        "framer-motion@^10.16.4",
+        "@emotion/react@^11.11.1",
+    ]
+)
+```
+
+## Best Practices
+
+### App Organization
+
+```python
+# main.py
+import reflex as rx
+from .pages import index, about, dashboard
+from .state import State
+
+# Initialize app with global settings
+app = rx.App(
+    theme=rx.theme(
+        appearance="light",
+        accent_color="blue",
+    ),
+    stylesheets=[
+        "https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap",
+    ],
+)
+
+# Add pages
+app.add_page(index, route="/")
+app.add_page(about, route="/about")
+app.add_page(dashboard, route="/dashboard", on_load=State.load_dashboard)
+```
+
+### Custom App Wraps
+
+```python
+def app_wrap(enable_state: bool) -> rx.Component | None:
+    """Custom wrapper for entire app"""
+    if enable_state:
+        return rx.box(
+            rx.color_mode_button(position="top-right"),
+            # Rest of app content here
+        )
+    return None
+
+app = rx.App(
+    extra_app_wraps={
+        (0, "custom_wrap"): app_wrap,
+    }
+)
+```
+
+### Toast Provider
+
+```python
+app = rx.App(
+    toaster=rx.toast.provider(position="top-right")
+)
+
+# In event handler
+def show_notification():
+    return rx.toast.success("Operation successful!")
+```
+
+### API Transformer
+
+```python
+from starlette.middleware.cors import CORSMiddleware
+
+def add_cors_middleware(app):
+    return CORSMiddleware(
+        app,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+app = rx.App(
+    api_transformer=add_cors_middleware
+)
+```
+
+## Common Patterns
+
+### Multi-Environment Configuration
+
+```python
+# rxconfig.py
+import os
+import reflex as rx
+
+def get_config():
+    env = os.getenv("ENVIRONMENT", "development")
+    
+    base_config = {
+        "app_name": "myapp",
+        "telemetry_enabled": True,
+    }
+    
+    if env == "production":
+        return rx.Config(
+            **base_config,
+            api_url="https://api.myapp.com",
+            db_url=os.getenv("DATABASE_URL"),
+            redis_url=os.getenv("REDIS_URL"),
+            state_manager_mode=rx.StateManagerMode.REDIS,
+        )
+    
+    return rx.Config(
+        **base_config,
+        frontend_port=3000,
+        backend_port=8000,
+        api_url="http://localhost:8000",
+        db_url="sqlite:///reflex.db",
+    )
+
+config = get_config()
+```
+
+### Loading Environment Variables
+
+```python
+# rxconfig.py
+import reflex as rx
+
+config = rx.Config(
+    app_name="myapp",
+    env_file=".env",  # Load from .env file
+)
+```
+
+```bash
+# .env file
+REFLEX_APP_NAME=myapp
+REFLEX_DB_URL=postgresql://localhost/mydb
+REFLEX_REDIS_URL=redis://localhost:6379
+REFLEX_API_URL=http://localhost:8000
+```
+
+## Error Handling
+
+### Default Handlers
+- Frontend: `default_frontend_exception_handler` - logs errors to console
+- Backend: `default_backend_exception_handler` - returns error event spec
+
+### Custom Error Handlers
+```python
+def custom_backend_handler(exception: Exception) -> rx.EventSpec:
+    """Log errors and show user-friendly message"""
+    import logging
+    logging.error(f"Backend error: {exception}")
+    return rx.window_alert(f"An error occurred: {str(exception)}")
+
+app = rx.App(
+    backend_exception_handler=custom_backend_handler
+)
+```
+
+## Performance Optimization
+
+- Use `state_manager_mode=REDIS` for horizontal scaling
+- Enable `react_strict_mode=True` to catch issues early
+- Set `reset_style=True` to normalize CSS across browsers
+- Configure `static_page_generation_timeout` for large apps
+- Use `frontend_packages` to add only necessary dependencies

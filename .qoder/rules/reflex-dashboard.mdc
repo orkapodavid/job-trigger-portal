@@ -1,0 +1,969 @@
+---
+description: Guidelines for creating professional Reflex dashboards with best practices and component patterns
+globs: ["**/*.py", "**/rxconfig.py"]
+---
+
+# Reflex Dashboard Development Guide
+
+You are an expert in creating professional Reflex dashboards using established patterns and best practices.
+
+## Project Structure
+
+### Recommended Directory Layout
+A flexible directory structure that can be adapted to different dashboard types:
+
+```
+your_dashboard/
+├── your_dashboard/
+│   ├── components/          # Reusable UI components
+│   │   ├── sidebar.py
+│   │   ├── header.py
+│   │   ├── navbar.py
+│   │   ├── charts.py
+│   │   └── ...
+│   ├── states/             # State management
+│   │   ├── dashboard_state.py
+│   │   ├── data.py
+│   │   └── utils.py
+│   ├── models/             # Data models (TypedDict or rx.Model)
+│   │   └── models.py
+│   ├── pages/              # Page components (optional for larger apps)
+│   │   ├── __init__.py
+│   │   ├── index.py
+│   │   └── ...
+│   ├── styles/             # Style constants and themes
+│   │   └── styles.py
+│   ├── __init__.py
+│   ├── your_dashboard.py   # Main app file
+│   └── config.py           # App configuration
+├── assets/                 # Static assets (optional)
+│   └── styles.css
+├── tests/                  # Test files
+├── requirements.txt
+└── rxconfig.py
+```
+
+## Core Principles
+
+### 1. Component Organization
+- **Separation of Concerns**: Each component should have a single responsibility
+- **Reusability**: Create small, reusable components
+- **Composition**: Build complex UIs from simple components
+- **File Naming**: Use snake_case for Python files
+
+### 2. State Management
+- Use `rx.State` classes for managing application state
+- Define computed properties with `@rx.var` decorator
+- Use `@rx.event` decorator for event handlers
+- Keep state logic separate from UI components
+- Use `@rx.event(background=True)` for async operations
+
+### 3. Styling Approach
+- Use Tailwind CSS classes via `class_name` prop
+- Define style constants in `styles.py`
+- Use Reflex theme system with `rx.theme()`
+- Support light/dark modes with `appearance` setting
+- Use Radix UI color system: `rx.color("gray", 5)`
+
+## Main App File Pattern
+
+### Basic Structure
+```python
+import reflex as rx
+from .components.sidebar import sidebar
+from .components.header import header
+from .states.dashboard_state import DashboardState
+
+def index() -> rx.Component:
+    """The main dashboard page."""
+    return rx.el.div(
+        sidebar(),
+        rx.el.main(
+            header(),
+            # Main dashboard content here
+            class_name="flex-1 p-6 bg-gray-50 overflow-y-auto",
+        ),
+        class_name="flex min-h-screen",
+    )
+
+app = rx.App(theme=rx.theme(appearance="light"))
+app.add_page(index, route="/")
+```
+
+### With Template System (Optional)
+```python
+from .templates import template
+
+@template(route="/", title="Dashboard", on_load=State.load_data)
+def index() -> rx.Component:
+    return rx.vstack(
+        # Page content
+        spacing="8",
+        width="100%",
+    )
+```
+
+### App Configuration Options
+```python
+app = rx.App(
+    theme=rx.theme(
+        appearance="light",           # or "dark"
+        has_background=False,         # Control default background
+        radius="medium",              # "none", "small", "medium", "large", "full"
+        accent_color="indigo",        # Primary color
+        gray_color="gray",            # Gray scale color
+        scaling="100%",               # UI scaling
+    ),
+    style={
+        "font_family": "'Inter', sans-serif",
+        # Global styles
+    },
+    stylesheets=[
+        "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap",
+    ],
+    head_components=[
+        # Additional head elements
+    ],
+)
+```
+
+## Component Patterns
+
+### Sidebar Component
+```python
+import reflex as rx
+
+def sidebar_item(text: str, icon: str, url: str, is_active: bool) -> rx.Component:
+    """Individual sidebar navigation item."""
+    return rx.link(
+        rx.hstack(
+            rx.icon(tag=icon, class_name="w-5 h-5"),
+            rx.text(text, size="3"),
+            class_name=rx.cond(
+                is_active,
+                "flex items-center px-4 py-2 text-sm font-semibold bg-blue-100 rounded-lg",
+                "flex items-center px-4 py-2 text-sm hover:bg-gray-100 rounded-lg",
+            ),
+        ),
+        href=url,
+        underline="none",
+    )
+
+def sidebar() -> rx.Component:
+    """Main sidebar navigation."""
+    return rx.el.div(
+        rx.el.div(
+            rx.el.h2("Your Dashboard", class_name="text-xl font-bold"),
+            class_name="p-4",
+        ),
+        rx.el.nav(
+            # Navigation items
+            class_name="flex-grow px-4",
+        ),
+        class_name="w-64 h-screen bg-white border-r border-gray-200",
+    )
+```
+
+### Header Component
+```python
+def header() -> rx.Component:
+    """Dashboard header with navigation and user actions."""
+    return rx.el.header(
+        rx.el.div(
+            rx.el.h1(
+                "Dashboard",
+                class_name="text-2xl font-bold text-gray-800",
+            ),
+            rx.el.div(
+                rx.icon(tag="bell", class_name="text-gray-600 cursor-pointer"),
+                class_name="flex items-center gap-4",
+            ),
+            class_name="flex justify-between items-center px-6 py-4 border-b",
+        ),
+    )
+```
+
+### Stats Card Component
+```python
+def stats_card(
+    title: str,
+    value: str | int,
+    change_percent: float,
+    icon: str,
+    icon_color: str = "blue",
+) -> rx.Component:
+    """Reusable stats card with trend indicator."""
+    is_positive = change_percent >= 0
+    
+    return rx.card(
+        rx.vstack(
+            rx.hstack(
+                rx.badge(
+                    rx.icon(tag=icon, size=24),
+                    color_scheme=icon_color,
+                    radius="full",
+                    padding="0.7rem",
+                ),
+                rx.vstack(
+                    rx.heading(str(value), size="6", weight="bold"),
+                    rx.text(title, size="4", weight="medium"),
+                    spacing="1",
+                    align_items="start",
+                ),
+                spacing="4",
+                align="center",
+            ),
+            rx.hstack(
+                rx.icon(
+                    tag="trending-up" if is_positive else "trending-down",
+                    size=20,
+                    color=rx.color("green" if is_positive else "red", 9),
+                ),
+                rx.text(
+                    f"{abs(change_percent)}%",
+                    color=rx.color("green" if is_positive else "red", 9),
+                ),
+                spacing="2",
+            ),
+            spacing="3",
+        ),
+        size="3",
+        width="100%",
+    )
+```
+
+### Chart Components
+
+#### Area Chart
+```python
+def area_chart(data: list, data_key: str, color: str = "blue") -> rx.Component:
+    """Area chart with gradient fill."""
+    return rx.recharts.area_chart(
+        rx.el.svg.defs(
+            rx.el.svg.linear_gradient(
+                rx.el.svg.stop(
+                    stop_color=rx.color(color, 7),
+                    offset="5%",
+                    stop_opacity=0.8,
+                ),
+                rx.el.svg.stop(
+                    stop_color=rx.color(color, 7),
+                    offset="95%",
+                    stop_opacity=0,
+                ),
+                x1=0, x2=0, y1=0, y2=1,
+                id=f"color{color}",
+            ),
+        ),
+        rx.recharts.cartesian_grid(stroke_dasharray="3 3"),
+        rx.recharts.area(
+            data_key=data_key,
+            stroke=rx.color(color, 9),
+            fill=f"url(#color{color})",
+            type_="monotone",
+        ),
+        rx.recharts.x_axis(data_key="name"),
+        rx.recharts.y_axis(),
+        rx.recharts.legend(),
+        rx.recharts.graphing_tooltip(
+            content_style={
+                "backgroundColor": rx.color("gray", 1),
+                "borderRadius": "var(--radius-2)",
+                "borderWidth": "1px",
+                "borderColor": rx.color(color, 7),
+            },
+        ),
+        data=data,
+        height=400,
+    )
+```
+
+#### Bar Chart
+```python
+def bar_chart(data: list, data_key: str, color: str = "blue") -> rx.Component:
+    """Simple bar chart."""
+    return rx.recharts.bar_chart(
+        rx.recharts.cartesian_grid(stroke_dasharray="3 3"),
+        rx.recharts.bar(
+            data_key=data_key,
+            fill=rx.color(color, 7),
+            stroke=rx.color(color, 9),
+        ),
+        rx.recharts.x_axis(data_key="name"),
+        rx.recharts.y_axis(),
+        rx.recharts.legend(),
+        rx.recharts.graphing_tooltip(),
+        data=data,
+        height=400,
+    )
+```
+
+#### Pie Chart
+```python
+def pie_chart(data: list) -> rx.Component:
+    """Pie chart with custom colors."""
+    return rx.recharts.pie_chart(
+        rx.recharts.pie(
+            data=data,
+            data_key="value",
+            name_key="name",
+            cx="50%",
+            cy="50%",
+            inner_radius="60",
+            outer_radius="90",
+            padding_angle=2,
+            label=True,
+        ),
+        rx.recharts.legend(),
+        height=350,
+    )
+```
+
+### Data Table Component
+```python
+def data_table(columns: list[str], data: list) -> rx.Component:
+    """Responsive data table."""
+    return rx.el.div(
+        rx.el.table(
+            rx.el.thead(
+                rx.el.tr(
+                    *[
+                        rx.el.th(
+                            col,
+                            class_name="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider",
+                        )
+                        for col in columns
+                    ],
+                    class_name="bg-gray-50",
+                ),
+            ),
+            rx.el.tbody(
+                rx.foreach(
+                    data,
+                    lambda row: rx.el.tr(
+                        # Table cells
+                        class_name="hover:bg-gray-50",
+                    ),
+                ),
+            ),
+            class_name="min-w-full divide-y divide-gray-200",
+        ),
+        class_name="overflow-x-auto bg-white rounded-lg shadow",
+    )
+```
+
+## State Management Patterns
+
+### Basic State Class
+```python
+import reflex as rx
+from typing import List, Optional
+
+class DashboardState(rx.State):
+    """State for dashboard data and interactions."""
+    
+    # State variables
+    data: List[dict] = []
+    search_query: str = ""
+    selected_item: Optional[str] = None
+    loading: bool = False
+    current_page: int = 1
+    items_per_page: int = 10
+    
+    # Computed properties
+    @rx.var
+    def filtered_data(self) -> List[dict]:
+        """Filter data based on search query."""
+        if not self.search_query:
+            return self.data
+        
+        search_lower = self.search_query.lower()
+        return [
+            item for item in self.data
+            if search_lower in str(item.get("name", "")).lower()
+        ]
+    
+    @rx.var
+    def total_pages(self) -> int:
+        """Calculate total pages for pagination."""
+        import math
+        return math.ceil(len(self.filtered_data) / self.items_per_page)
+    
+    @rx.var
+    def paginated_data(self) -> List[dict]:
+        """Get data for current page."""
+        start = (self.current_page - 1) * self.items_per_page
+        end = start + self.items_per_page
+        return self.filtered_data[start:end]
+    
+    # Event handlers
+    @rx.event
+    def set_search_query(self, query: str):
+        """Update search query and reset to first page."""
+        self.search_query = query
+        self.current_page = 1
+    
+    @rx.event
+    def select_item(self, item_id: str):
+        """Select or deselect an item."""
+        if self.selected_item == item_id:
+            self.selected_item = None
+        else:
+            self.selected_item = item_id
+    
+    @rx.event
+    def next_page(self):
+        """Navigate to next page."""
+        if self.current_page < self.total_pages:
+            self.current_page += 1
+    
+    @rx.event
+    def previous_page(self):
+        """Navigate to previous page."""
+        if self.current_page > 1:
+            self.current_page -= 1
+    
+    @rx.event(background=True)
+    async def load_data(self):
+        """Load data asynchronously."""
+        async with self:
+            self.loading = True
+        
+        # Simulate API call
+        import asyncio
+        await asyncio.sleep(1)
+        
+        async with self:
+            self.data = [
+                {"id": 1, "name": "Item 1"},
+                {"id": 2, "name": "Item 2"},
+            ]
+            self.loading = False
+```
+
+### Tab Management State
+```python
+from typing import Literal
+
+class TabState(rx.State):
+    """State for managing tabs."""
+    
+    active_tab: Literal["overview", "analytics", "settings"] = "overview"
+    
+    @rx.event
+    def set_active_tab(self, tab: str):
+        """Set the active tab."""
+        self.active_tab = tab
+```
+
+### Filter/Sort State
+```python
+from typing import Literal
+
+SortColumn = Literal["id", "name", "date", "value"]
+SortOrder = Literal["asc", "desc"]
+
+class FilterState(rx.State):
+    """State for filtering and sorting."""
+    
+    sort_column: Optional[SortColumn] = "id"
+    sort_order: SortOrder = "asc"
+    filter_category: str = "All"
+    
+    @rx.event
+    def sort_by(self, column: SortColumn):
+        """Toggle sort on column."""
+        if self.sort_column == column:
+            self.sort_order = "desc" if self.sort_order == "asc" else "asc"
+        else:
+            self.sort_column = column
+            self.sort_order = "asc"
+    
+    @rx.var
+    def sorted_data(self) -> list:
+        """Return sorted data."""
+        data = list(self.data)
+        
+        if self.sort_column:
+            data.sort(
+                key=lambda x: x.get(self.sort_column, ""),
+                reverse=(self.sort_order == "desc"),
+            )
+        
+        return data
+```
+
+## Data Models
+
+### TypedDict Pattern
+```python
+from typing import TypedDict, List, Optional
+from datetime import datetime
+
+class Employee(TypedDict):
+    """Employee data model."""
+    employee_id: int
+    first_name: str
+    last_name: str
+    email: str
+    department: str
+    salary: int
+    projects_closed: int
+    pending_projects: int
+
+class CustomerData(TypedDict):
+    """Customer data with nested structure."""
+    id: int
+    customer_name: str
+    next_renewal: str
+    revenue: float
+    licenses: int
+    active_licenses: int
+    industry: str
+    platform: str
+    usage_history: List[dict]
+    next_renewal_date: Optional[datetime]
+```
+
+## Styles.py Pattern
+
+```python
+"""Shared style constants."""
+import reflex as rx
+
+# Colors
+border_radius = "var(--radius-2)"
+border = f"1px solid {rx.color('gray', 5)}"
+text_color = rx.color("gray", 11)
+gray_color = rx.color("gray", 11)
+gray_bg_color = rx.color("gray", 3)
+accent_text_color = rx.color("accent", 10)
+accent_color = rx.color("accent", 1)
+accent_bg_color = rx.color("accent", 3)
+
+# Hover effects
+hover_accent_color = {"_hover": {"color": accent_text_color}}
+hover_accent_bg = {"_hover": {"background_color": accent_color}}
+
+# Dimensions
+sidebar_width = "16em"
+max_width = "1480px"
+
+# Common styles
+box_shadow_style = "0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)"
+
+template_page_style = {
+    "padding_top": ["1em", "1em", "2em"],
+    "padding_x": ["auto", "auto", "2em"],
+}
+
+template_content_style = {
+    "padding": "1em",
+    "margin_bottom": "2em",
+    "min_height": "90vh",
+}
+
+link_style = {
+    "color": accent_text_color,
+    "text_decoration": "none",
+    **hover_accent_color,
+}
+
+# Stylesheets
+base_stylesheets = [
+    "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap",
+]
+
+base_style = {
+    "font_family": "Inter",
+}
+```
+
+## Common Patterns
+
+### Conditional Rendering
+```python
+# Simple condition
+rx.cond(
+    State.loading,
+    rx.spinner(),
+    rx.text("Content loaded"),
+)
+
+# Multiple conditions with match
+rx.match(
+    State.active_tab,
+    ("overview", overview_component()),
+    ("analytics", analytics_component()),
+    ("settings", settings_component()),
+    default_component(),  # Default case
+)
+```
+
+### Foreach Loops
+```python
+# Simple foreach
+rx.foreach(
+    State.items,
+    lambda item: rx.text(item["name"]),
+)
+
+# With index
+rx.foreach(
+    State.items,
+    lambda item, index: rx.el.div(
+        rx.text(f"{index + 1}. {item['name']}"),
+    ),
+)
+```
+
+### Event Handlers
+```python
+# Simple click
+rx.button(
+    "Click me",
+    on_click=State.handle_click,
+)
+
+# With parameter
+rx.button(
+    "Delete",
+    on_click=lambda: State.delete_item(item_id),
+)
+
+# Multiple events
+rx.input(
+    on_change=State.set_value,
+    on_blur=State.validate,
+    on_focus=State.clear_error,
+)
+```
+
+### Loading States
+```python
+rx.cond(
+    State.loading,
+    rx.el.div(
+        rx.spinner(),
+        rx.text("Loading...", class_name="ml-2"),
+        class_name="flex items-center justify-center p-8",
+    ),
+    rx.cond(
+        State.data.length() > 0,
+        data_component(),
+        rx.text("No data available", class_name="text-gray-500"),
+    ),
+)
+```
+
+### Responsive Design
+```python
+# Responsive grid
+rx.grid(
+    *items,
+    columns=["1", "2", "3", "4"],  # Mobile to desktop
+    gap="4",
+    width="100%",
+)
+
+# Responsive display
+rx.el.div(
+    display=["none", "none", "block"],  # Hidden on mobile, visible on desktop
+)
+
+# Responsive classes
+class_name="flex flex-col lg:flex-row"
+```
+
+## Layout Patterns
+
+### Flex Layout with Sidebar
+```python
+def index() -> rx.Component:
+    return rx.el.div(
+        sidebar(),
+        rx.el.main(
+            header(),
+            content(),
+            class_name="flex-1 p-6 overflow-y-auto",
+        ),
+        class_name="flex min-h-screen",
+    )
+```
+
+### Grid Dashboard Layout
+```python
+def dashboard_grid() -> rx.Component:
+    return rx.el.div(
+        header(),
+        rx.grid(
+            stats_card("Users", 1234),
+            stats_card("Revenue", 5678),
+            stats_card("Orders", 910),
+            columns=["1", "2", "3"],
+            gap="6",
+            class_name="mb-6",
+        ),
+        rx.grid(
+            chart_component(),
+            table_component(),
+            columns=["1", "1", "2"],
+            gap="6",
+        ),
+        class_name="p-6",
+    )
+```
+
+### Card Container Pattern
+```python
+def card(*children, **props):
+    """Reusable card wrapper."""
+    return rx.card(
+        *children,
+        box_shadow=box_shadow_style,
+        size="3",
+        width="100%",
+        **props,
+    )
+
+# Usage
+card(
+    rx.heading("Title"),
+    rx.text("Content"),
+)
+```
+
+## Best Practices
+
+### 1. Performance
+- Use `@rx.var` for computed properties instead of recalculating in components
+- Implement pagination for large datasets
+- Use `background=True` for async operations
+- Avoid deep nesting of components
+
+### 2. Code Organization
+- One component per file when components are complex
+- Group related components in directories
+- Use meaningful, descriptive names
+- Keep business logic in state classes
+
+### 3. Styling
+- Prefer Tailwind classes over inline styles
+- Use responsive classes: `class_name="flex flex-col md:flex-row"`
+- Define color constants in styles.py
+- Use Radix theme system for consistency
+
+### 4. State Management
+- Keep state minimal and normalized
+- Use computed vars for derived data
+- Clear separation between UI state and data state
+- Use TypedDict for type safety
+
+### 5. Accessibility
+- Use semantic HTML elements: `rx.el.header`, `rx.el.nav`, `rx.el.main`
+- Provide meaningful text labels
+- Ensure keyboard navigation works
+- Maintain good color contrast
+
+### 6. Error Handling
+```python
+@rx.event(background=True)
+async def load_data(self):
+    async with self:
+        self.loading = True
+        self.error = None
+    
+    try:
+        # Fetch data
+        data = await fetch_data()
+        async with self:
+            self.data = data
+    except Exception as e:
+        async with self:
+            self.error = str(e)
+    finally:
+        async with self:
+            self.loading = False
+```
+
+## Common UI Patterns
+
+### Search Bar
+```python
+def search_bar() -> rx.Component:
+    return rx.input(
+        rx.input.slot(rx.icon("search")),
+        placeholder="Search...",
+        value=State.search_query,
+        on_change=State.set_search_query,
+        size="3",
+        class_name="w-full max-w-md",
+    )
+```
+
+### Pagination
+```python
+def pagination() -> rx.Component:
+    return rx.hstack(
+        rx.button(
+            rx.icon("chevron-left"),
+            on_click=State.previous_page,
+            disabled=State.current_page == 1,
+            variant="soft",
+        ),
+        rx.text(f"Page {State.current_page} of {State.total_pages}"),
+        rx.button(
+            rx.icon("chevron-right"),
+            on_click=State.next_page,
+            disabled=State.current_page == State.total_pages,
+            variant="soft",
+        ),
+        spacing="4",
+        align="center",
+    )
+```
+
+### Dropdown Filter
+```python
+def filter_dropdown(options: list[str]) -> rx.Component:
+    return rx.select(
+        options,
+        value=State.selected_filter,
+        on_change=State.set_filter,
+        placeholder="Filter by...",
+        size="3",
+    )
+```
+
+### Tab Navigation
+```python
+def tab_navigation() -> rx.Component:
+    return rx.el.nav(
+        rx.foreach(
+            ["Overview", "Analytics", "Settings"],
+            lambda tab: rx.el.button(
+                tab,
+                on_click=lambda: State.set_active_tab(tab.lower()),
+                class_name=rx.cond(
+                    State.active_tab == tab.lower(),
+                    "px-4 py-2 bg-blue-100 text-blue-700 rounded-lg",
+                    "px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg",
+                ),
+            ),
+        ),
+        class_name="flex gap-2",
+    )
+```
+
+### Modal/Dialog
+```python
+def confirmation_dialog() -> rx.Component:
+    return rx.dialog.root(
+        rx.dialog.trigger(
+            rx.button("Delete", color_scheme="red"),
+        ),
+        rx.dialog.content(
+            rx.dialog.title("Confirm Delete"),
+            rx.dialog.description(
+                "Are you sure you want to delete this item?",
+            ),
+            rx.flex(
+                rx.dialog.close(
+                    rx.button("Cancel", variant="soft"),
+                ),
+                rx.dialog.close(
+                    rx.button(
+                        "Delete",
+                        color_scheme="red",
+                        on_click=State.confirm_delete,
+                    ),
+                ),
+                spacing="3",
+                justify="end",
+            ),
+        ),
+    )
+```
+
+## Requirements.txt Pattern
+
+```txt
+reflex>=0.7.13a1
+python-dateutil>=2.9.0  # If working with dates
+faker>=20.0.0           # For generating test data
+```
+
+## rxconfig.py Pattern
+
+```python
+import reflex as rx
+
+config = rx.Config(
+    app_name="dashboard_name",
+    plugins=[
+        rx.plugins.SitemapPlugin(),  # Optional: Generate sitemap
+    ],
+)
+```
+
+## Testing Data Generation
+
+```python
+import random
+from faker import Faker
+
+fake = Faker()
+
+def generate_test_data(count: int = 100) -> list:
+    """Generate fake data for testing."""
+    return [
+        {
+            "id": i,
+            "name": fake.name(),
+            "email": fake.email(),
+            "department": random.choice(["Sales", "Engineering", "Marketing"]),
+            "salary": random.randint(50000, 150000),
+        }
+        for i in range(1, count + 1)
+    ]
+```
+
+## Common Gotchas
+
+1. **State Updates in Background Tasks**: Always use `async with self:` when updating state in background tasks
+2. **Foreach with Lambda**: Lambda functions in foreach need to handle both item and index parameters
+3. **Conditional Classes**: Use `rx.cond()` for dynamic class names, not Python ternary operators in strings
+4. **Event Handlers**: Lambda functions with parameters must be wrapped: `on_click=lambda: State.func(param)`
+5. **Responsive Arrays**: Arrays for responsive values go from smallest to largest screen: `["mobile", "tablet", "desktop"]`
+
+## Quick Reference
+
+### Essential Imports
+```python
+import reflex as rx
+from typing import List, Dict, Optional, Literal, TypedDict
+import asyncio  # For background tasks
+```
+
+### Common Reflex Components
+- Layout: `rx.el.div`, `rx.flex`, `rx.grid`, `rx.hstack`, `rx.vstack`
+- Typography: `rx.heading`, `rx.text`, `rx.el.h1`, `rx.el.p`
+- Forms: `rx.input`, `rx.select`, `rx.button`, `rx.checkbox`
+- Feedback: `rx.spinner`, `rx.toast`, `rx.dialog`
+- Navigation: `rx.link`, `rx.tabs`
+- Data Display: `rx.card`, `rx.table`, `rx.badge`
+- Icons: `rx.icon(tag="icon-name")`
+- Charts: `rx.recharts.area_chart`, `rx.recharts.bar_chart`, `rx.recharts.pie_chart`
+
+### Color System
+```python
+rx.color("gray", 1)    # Lightest
+rx.color("gray", 12)   # Darkest
+rx.color("accent", 9)  # Uses theme accent color
+```
+
+Available colors: gray, gold, bronze, brown, yellow, amber, orange, tomato, red, ruby, crimson, pink, plum, purple, violet, iris, indigo, blue, cyan, teal, jade, green, grass, lime, mint, sky
+
+---
+
+This guide covers the essential patterns for building production-ready Reflex dashboards. Always refer to the official Reflex documentation for the latest API changes and features.

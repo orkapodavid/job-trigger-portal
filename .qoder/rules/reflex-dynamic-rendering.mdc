@@ -1,0 +1,700 @@
+---
+description: Expert guide for Reflex Dynamic Rendering components including Cond, Foreach, Match, and Auto Scroll
+globs:
+  - "**/*.py"
+---
+
+# Reflex Dynamic Rendering Expert
+
+You are an expert in Reflex's Dynamic Rendering components, specializing in conditional rendering, list iteration, pattern matching, and dynamic UI updates.
+
+## Core Dynamic Rendering Components
+
+### Cond Component (`rx.cond`)
+
+**Purpose**: Conditionally render components based on boolean expressions
+
+**Syntax**:
+```python
+rx.cond(condition, component_if_true, component_if_false)
+# component_if_false is optional
+```
+
+**Best Practices**:
+
+#### Basic Conditional Rendering
+```python
+# Simple toggle
+rx.cond(
+    State.show_content,
+    rx.text("Content is visible"),
+    rx.text("Content is hidden")
+)
+
+# Without else clause
+rx.cond(
+    State.is_logged_in,
+    rx.button("Logout", on_click=State.logout)
+)
+
+# Loading states
+rx.cond(
+    State.is_loading,
+    rx.spinner(),
+    rx.vstack(
+        # Loaded content
+        *State.render_content()
+    )
+)
+```
+
+#### Negation with `~` Operator
+```python
+# Negate condition
+rx.cond(
+    ~State.is_visible,
+    rx.text("Hidden mode"),
+    rx.text("Visible mode")
+)
+```
+
+#### Logical Operators (`&` and `|`)
+```python
+# Logical AND (&)
+rx.cond(
+    (State.age >= 18) & (State.age <= 65),
+    rx.text("You can work!"),
+    rx.text("You cannot work.")
+)
+
+# Logical OR (|)
+rx.cond(
+    (State.is_admin | State.is_moderator),
+    rx.button("Manage Users"),
+    rx.text("No permissions")
+)
+
+# Complex conditions
+rx.cond(
+    (State.is_logged_in & State.has_subscription) | State.is_trial,
+    rx.text("Access granted"),
+    rx.callout.root(
+        rx.callout.text("Please subscribe to continue"),
+        color_scheme="red"
+    )
+)
+```
+
+#### Nested Conditionals (if-elif-else pattern)
+```python
+# Check if number is positive, negative, or zero
+rx.cond(
+    State.number > 0,
+    rx.text("Positive", color_scheme="green"),
+    rx.cond(
+        State.number < 0,
+        rx.text("Negative", color_scheme="red"),
+        rx.text("Zero", color_scheme="gray")
+    )
+)
+
+# Multi-level status check
+rx.cond(
+    State.status == "success",
+    rx.badge("Success", color_scheme="green"),
+    rx.cond(
+        State.status == "pending",
+        rx.badge("Pending", color_scheme="yellow"),
+        rx.cond(
+            State.status == "error",
+            rx.badge("Error", color_scheme="red"),
+            rx.badge("Unknown", color_scheme="gray")
+        )
+    )
+)
+```
+
+#### Advanced Nested Example
+```python
+# Find largest of three numbers
+rx.cond(
+    (State.num1 == State.num2) | (State.num2 == State.num3) | (State.num1 == State.num3),
+    rx.text("Some numbers are equal!"),
+    rx.cond(
+        (State.num1 > State.num2) & (State.num1 > State.num3),
+        rx.text(f"{State.num1} is the largest"),
+        rx.cond(
+            State.num2 > State.num3,
+            rx.text(f"{State.num2} is the largest"),
+            rx.text(f"{State.num3} is the largest")
+        )
+    )
+)
+```
+
+### Foreach Component (`rx.foreach`)
+
+**Purpose**: Iterate over sequences and render components for each item
+
+**Syntax**:
+```python
+rx.foreach(sequence, render_function)
+```
+
+**Best Practices**:
+
+#### Basic Iteration
+```python
+# Simple list rendering
+class ListState(rx.State):
+    items: list[str] = ["Item 1", "Item 2", "Item 3"]
+
+rx.vstack(
+    rx.foreach(
+        ListState.items,
+        lambda item: rx.text(item)
+    )
+)
+
+# With index
+rx.foreach(
+    State.items,
+    lambda item, idx: rx.text(f"{idx + 1}. {item}")
+)
+```
+
+#### Complex Data Structures
+```python
+# List of dictionaries
+class DataState(rx.State):
+    users: list[dict] = [
+        {"name": "Alice", "email": "alice@example.com"},
+        {"name": "Bob", "email": "bob@example.com"}
+    ]
+
+rx.vstack(
+    rx.foreach(
+        DataState.users,
+        lambda user: rx.card(
+            rx.vstack(
+                rx.heading(user["name"]),
+                rx.text(user["email"]),
+                spacing="2"
+            )
+        )
+    ),
+    spacing="3"
+)
+```
+
+#### Using Data Classes
+```python
+from dataclasses import dataclass
+
+@dataclass
+class Person:
+    name: str
+    email: str
+    role: str
+
+class TeamState(rx.State):
+    team: list[Person] = [
+        Person("Alice", "alice@example.com", "Developer"),
+        Person("Bob", "bob@example.com", "Designer")
+    ]
+
+def person_card(person: Person):
+    return rx.card(
+        rx.vstack(
+            rx.heading(person.name, size="4"),
+            rx.text(person.email, size="2"),
+            rx.badge(person.role, color_scheme="blue"),
+            spacing="2"
+        )
+    )
+
+rx.vstack(
+    rx.foreach(TeamState.team, person_card),
+    spacing="3"
+)
+```
+
+#### Table with Foreach
+```python
+class TableState(rx.State):
+    people: list[dict] = [
+        {"name": "Danilo Sousa", "email": "danilo@example.com", "group": "Developer"},
+        {"name": "Zahra Ambessa", "email": "zahra@example.com", "group": "Admin"}
+    ]
+
+rx.table.root(
+    rx.table.header(
+        rx.table.row(
+            rx.table.column_header_cell("Name"),
+            rx.table.column_header_cell("Email"),
+            rx.table.column_header_cell("Group")
+        )
+    ),
+    rx.table.body(
+        rx.foreach(
+            TableState.people,
+            lambda person: rx.table.row(
+                rx.table.cell(person["name"]),
+                rx.table.cell(person["email"]),
+                rx.table.cell(person["group"])
+            )
+        )
+    )
+)
+```
+
+#### Grid Layouts
+```python
+# Product grid
+rx.grid(
+    rx.foreach(
+        State.products,
+        lambda product: rx.card(
+            rx.vstack(
+                rx.image(src=product.image),
+                rx.heading(product.name, size="4"),
+                rx.text(f"${product.price}"),
+                rx.button("Add to Cart", on_click=lambda: State.add_to_cart(product.id)),
+                spacing="2"
+            )
+        )
+    ),
+    columns="repeat(auto-fit, minmax(250px, 1fr))",
+    spacing="4"
+)
+```
+
+#### Nested Foreach
+```python
+# Categories with items
+class CategoryState(rx.State):
+    categories: list[dict] = [
+        {
+            "name": "Electronics",
+            "items": ["Phone", "Laptop", "Tablet"]
+        },
+        {
+            "name": "Clothing",
+            "items": ["Shirt", "Pants", "Shoes"]
+        }
+    ]
+
+rx.vstack(
+    rx.foreach(
+        CategoryState.categories,
+        lambda category: rx.vstack(
+            rx.heading(category["name"], size="5"),
+            rx.vstack(
+                rx.foreach(
+                    category["items"],
+                    lambda item: rx.text(f"• {item}")
+                ),
+                spacing="1"
+            ),
+            spacing="2",
+            align="start"
+        )
+    ),
+    spacing="4",
+    align="start"
+)
+```
+
+#### Empty State Handling
+```python
+# Show message when list is empty
+rx.cond(
+    State.items.length() > 0,
+    rx.vstack(
+        rx.foreach(
+            State.items,
+            lambda item: rx.card(item.name)
+        ),
+        spacing="3"
+    ),
+    rx.center(
+        rx.vstack(
+            rx.icon("inbox", size=48, color="gray"),
+            rx.text("No items found", color_scheme="gray"),
+            spacing="3"
+        ),
+        padding="8"
+    )
+)
+```
+
+### Match Component (`rx.match`)
+
+**Purpose**: Pattern matching similar to switch/case statements
+
+**Syntax**:
+```python
+rx.match(
+    expression,
+    (pattern1, component1),
+    (pattern2, component2),
+    default_component  # Optional default case
+)
+```
+
+**Best Practices**:
+
+#### Basic Pattern Matching
+```python
+# Status indicator
+rx.match(
+    State.status,
+    ("pending", rx.badge("Pending", color_scheme="yellow")),
+    ("approved", rx.badge("Approved", color_scheme="green")),
+    ("rejected", rx.badge("Rejected", color_scheme="red")),
+    rx.badge("Unknown", color_scheme="gray")  # Default
+)
+
+# Page routing
+rx.match(
+    State.current_page,
+    ("home", home_component()),
+    ("about", about_component()),
+    ("contact", contact_component()),
+    rx.text("Page not found")
+)
+```
+
+#### With Icons
+```python
+rx.match(
+    State.icon_type,
+    ("success", rx.icon("check-circle", color="green")),
+    ("error", rx.icon("x-circle", color="red")),
+    ("warning", rx.icon("alert-triangle", color="yellow")),
+    ("info", rx.icon("info", color="blue")),
+    rx.icon("help-circle", color="gray")
+)
+```
+
+#### Complex Components
+```python
+# Different layouts based on view mode
+rx.match(
+    State.view_mode,
+    ("grid", rx.grid(
+        rx.foreach(State.items, lambda item: item_card(item)),
+        columns="3",
+        spacing="4"
+    )),
+    ("list", rx.vstack(
+        rx.foreach(State.items, lambda item: item_row(item)),
+        spacing="2"
+    )),
+    ("compact", rx.vstack(
+        rx.foreach(State.items, lambda item: rx.text(item.name)),
+        spacing="1"
+    ))
+)
+```
+
+### Auto Scroll Component (`rx.auto_scroll`)
+
+**Purpose**: Automatically scroll to bottom when content updates
+
+**Best Practices**:
+
+#### Chat Interface
+```python
+rx.auto_scroll(
+    rx.vstack(
+        rx.foreach(
+            State.messages,
+            lambda msg: rx.card(
+                rx.vstack(
+                    rx.text(msg.user, weight="bold", size="2"),
+                    rx.text(msg.content),
+                    rx.text(msg.timestamp, size="1", color_scheme="gray"),
+                    spacing="1",
+                    align="start"
+                )
+            )
+        ),
+        spacing="2"
+    ),
+    height="400px"
+)
+```
+
+#### Live Logs
+```python
+rx.auto_scroll(
+    rx.code_block(
+        "\n".join(State.logs),
+        language="bash"
+    ),
+    height="300px",
+    background="black"
+)
+```
+
+## Common Patterns
+
+### Authentication Flow
+```python
+rx.cond(
+    State.is_authenticated,
+    # Logged in view
+    rx.vstack(
+        rx.hstack(
+            rx.avatar(fallback=State.user.initials),
+            rx.text(f"Welcome, {State.user.name}!"),
+            rx.spacer(),
+            rx.button("Logout", on_click=State.logout),
+            width="100%"
+        ),
+        rx.separator(),
+        # User content
+        dashboard_content(),
+        spacing="4",
+        width="100%"
+    ),
+    # Login view
+    rx.center(
+        rx.card(
+            rx.vstack(
+                rx.heading("Login"),
+                rx.input(placeholder="Email", type="email"),
+                rx.input(placeholder="Password", type="password"),
+                rx.button("Sign In", on_click=State.login),
+                spacing="3",
+                width="300px"
+            )
+        ),
+        height="100vh"
+    )
+)
+```
+
+### Dynamic Form Fields
+```python
+class FormState(rx.State):
+    field_type: str = "text"
+
+rx.form(
+    rx.vstack(
+        rx.select.root(
+            rx.select.trigger(placeholder="Field Type"),
+            rx.select.content(
+                rx.select.item("Text", value="text"),
+                rx.select.item("Number", value="number"),
+                rx.select.item("Date", value="date"),
+                rx.select.item("Select", value="select")
+            ),
+            value=FormState.field_type,
+            on_change=FormState.set_field_type
+        ),
+        rx.match(
+            FormState.field_type,
+            ("text", rx.input(type="text", name="value")),
+            ("number", rx.input(type="number", name="value")),
+            ("date", rx.input(type="date", name="value")),
+            ("select", rx.select.root(
+                rx.select.trigger(),
+                rx.select.content(
+                    rx.select.item("Option 1", value="1"),
+                    rx.select.item("Option 2", value="2")
+                ),
+                name="value"
+            ))
+        ),
+        rx.button("Submit", type="submit"),
+        spacing="3"
+    ),
+    on_submit=FormState.handle_submit
+)
+```
+
+### Filtered and Sorted Lists
+```python
+class DataState(rx.State):
+    all_items: list[dict] = []
+    filter_status: str = "all"
+    
+    @rx.var(cache=True)
+    def filtered_items(self) -> list[dict]:
+        if self.filter_status == "all":
+            return self.all_items
+        return [item for item in self.all_items if item["status"] == self.filter_status]
+
+rx.vstack(
+    # Filter controls
+    rx.select.root(
+        rx.select.trigger(placeholder="Filter"),
+        rx.select.content(
+            rx.select.item("All", value="all"),
+            rx.select.item("Active", value="active"),
+            rx.select.item("Completed", value="completed")
+        ),
+        value=DataState.filter_status,
+        on_change=DataState.set_filter_status
+    ),
+    # Filtered list
+    rx.cond(
+        DataState.filtered_items.length() > 0,
+        rx.vstack(
+            rx.foreach(
+                DataState.filtered_items,
+                lambda item: rx.card(
+                    rx.hstack(
+                        rx.text(item["name"]),
+                        rx.spacer(),
+                        rx.badge(item["status"]),
+                        width="100%"
+                    )
+                )
+            ),
+            spacing="2"
+        ),
+        rx.text("No items match the filter", color_scheme="gray")
+    ),
+    spacing="4",
+    width="100%"
+)
+```
+
+### Multi-Step Form
+```python
+class WizardState(rx.State):
+    current_step: int = 1
+    
+    def next_step(self):
+        self.current_step += 1
+    
+    def prev_step(self):
+        self.current_step -= 1
+
+rx.card(
+    rx.vstack(
+        # Progress indicator
+        rx.progress(value=(WizardState.current_step / 3) * 100),
+        # Step content
+        rx.match(
+            WizardState.current_step,
+            (1, rx.vstack(
+                rx.heading("Step 1: Personal Info"),
+                rx.input(placeholder="Name"),
+                rx.input(placeholder="Email"),
+                spacing="3"
+            )),
+            (2, rx.vstack(
+                rx.heading("Step 2: Preferences"),
+                rx.checkbox("Option 1"),
+                rx.checkbox("Option 2"),
+                spacing="3"
+            )),
+            (3, rx.vstack(
+                rx.heading("Step 3: Review"),
+                rx.text("Please review your information"),
+                spacing="3"
+            ))
+        ),
+        # Navigation buttons
+        rx.hstack(
+            rx.cond(
+                WizardState.current_step > 1,
+                rx.button("Previous", on_click=WizardState.prev_step)
+            ),
+            rx.spacer(),
+            rx.cond(
+                WizardState.current_step < 3,
+                rx.button("Next", on_click=WizardState.next_step),
+                rx.button("Submit", on_click=WizardState.submit_form)
+            ),
+            width="100%"
+        ),
+        spacing="4",
+        width="100%"
+    ),
+    max_width="500px"
+)
+```
+
+### Dashboard with Dynamic Widgets
+```python
+class DashboardState(rx.State):
+    widgets: list[str] = ["stats", "chart", "table"]
+
+rx.grid(
+    rx.foreach(
+        DashboardState.widgets,
+        lambda widget: rx.match(
+            widget,
+            ("stats", rx.card(
+                rx.vstack(
+                    rx.heading("Statistics"),
+                    rx.text("Data here"),
+                    spacing="2"
+                )
+            )),
+            ("chart", rx.card(
+                rx.vstack(
+                    rx.heading("Chart"),
+                    rx.recharts.line_chart(data=State.chart_data),
+                    spacing="2"
+                )
+            )),
+            ("table", rx.card(
+                rx.vstack(
+                    rx.heading("Recent Activity"),
+                    rx.table.root(
+                        # Table content
+                    ),
+                    spacing="2"
+                )
+            ))
+        )
+    ),
+    columns="repeat(auto-fit, minmax(300px, 1fr))",
+    spacing="4"
+)
+```
+
+## Performance Tips
+
+1. **Use cached vars**: For computed lists, use `@rx.var(cache=True)`
+2. **Minimize nesting**: Deep conditional nesting can impact readability
+3. **Extract render functions**: Move complex foreach callbacks to separate functions
+4. **Backend-only vars**: Use `_variable` prefix for large lists to reduce network traffic
+5. **Conditional loading**: Load data only when needed using `rx.cond`
+
+## Best Practices
+
+1. **Prefer `rx.match` over nested `rx.cond`** for multiple cases
+2. **Always handle empty states** in foreach loops
+3. **Use logical operators** for complex conditions instead of nested conds
+4. **Extract complex render logic** into separate functions for readability
+5. **Provide default cases** in match statements
+6. **Use data classes** instead of dictionaries for better type safety
+7. **Keep render functions pure** - avoid side effects in lambda functions
+8. **Consider performance** - minimize re-renders by using cached vars
+
+## Debugging Tips
+
+```python
+# Log conditions for debugging
+rx.vstack(
+    rx.text(f"Debug: condition = {State.condition}"),
+    rx.cond(
+        State.condition,
+        rx.text("True branch"),
+        rx.text("False branch")
+    )
+)
+
+# Log foreach iteration
+rx.foreach(
+    State.items,
+    lambda item, idx: rx.text(f"Index {idx}: {item}")
+)
+```

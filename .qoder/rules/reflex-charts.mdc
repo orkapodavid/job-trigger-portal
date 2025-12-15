@@ -1,0 +1,794 @@
+---
+description: Expert guide for Reflex Charts and Graphing components using Recharts including Bar, Line, Area, Pie, Scatter, Radar charts and supporting components
+globs:
+  - "**/*.py"
+---
+
+# Reflex Charts and Graphing Expert
+
+You are an expert in Reflex's charting and graphing components (based on Recharts), specializing in creating interactive, responsive data visualizations.
+
+## Chart Types
+
+### Bar Chart (`rx.recharts.bar_chart`)
+
+**Purpose**: Display categorical data with rectangular bars
+
+**Structure**:
+```python
+rx.recharts.bar_chart(
+    rx.recharts.bar(data_key="value"),
+    rx.recharts.x_axis(data_key="name"),
+    rx.recharts.y_axis(),
+    data=State.chart_data
+)
+```
+
+**Key Properties**:
+- `data`: List of dictionaries with chart data
+- `bar_category_gap`: Gap between bar categories (default: "10%")
+- `bar_gap`: Gap between bars in same category (default: 4)
+- `bar_size`: Fixed bar width
+- `max_bar_size`: Maximum bar width
+- `layout`: "horizontal" | "vertical" (default: "horizontal")
+- `margin`: Dict with top, right, bottom, left margins
+
+**Best Practices**:
+
+#### Simple Bar Chart
+```python
+class ChartState(rx.State):
+    data: list[dict] = [
+        {"name": "Jan", "sales": 4000, "expenses": 2400},
+        {"name": "Feb", "sales": 3000, "expenses": 1398},
+        {"name": "Mar", "sales": 2000, "expenses": 9800},
+        {"name": "Apr", "sales": 2780, "expenses": 3908},
+        {"name": "May", "sales": 1890, "expenses": 4800},
+    ]
+
+rx.recharts.bar_chart(
+    rx.recharts.bar(
+        data_key="sales",
+        fill=rx.color("accent", 9)
+    ),
+    rx.recharts.x_axis(data_key="name"),
+    rx.recharts.y_axis(),
+    rx.recharts.legend(),
+    data=ChartState.data,
+    width="100%",
+    height=300
+)
+```
+
+#### Multiple Bars
+```python
+rx.recharts.bar_chart(
+    rx.recharts.bar(
+        data_key="sales",
+        fill=rx.color("blue", 9),
+        name="Sales"
+    ),
+    rx.recharts.bar(
+        data_key="expenses",
+        fill=rx.color("red", 9),
+        name="Expenses"
+    ),
+    rx.recharts.x_axis(data_key="name"),
+    rx.recharts.y_axis(),
+    rx.recharts.cartesian_grid(stroke_dasharray="3 3"),
+    rx.recharts.legend(),
+    rx.recharts.graphing_tooltip(),
+    data=ChartState.data,
+    width="100%",
+    height=400
+)
+```
+
+#### Stacked Bar Chart
+```python
+rx.recharts.bar_chart(
+    rx.recharts.bar(
+        data_key="category1",
+        stack_id="stack",
+        fill=rx.color("blue", 9)
+    ),
+    rx.recharts.bar(
+        data_key="category2",
+        stack_id="stack",
+        fill=rx.color("green", 9)
+    ),
+    rx.recharts.bar(
+        data_key="category3",
+        stack_id="stack",
+        fill=rx.color("red", 9)
+    ),
+    rx.recharts.x_axis(data_key="name"),
+    rx.recharts.y_axis(),
+    rx.recharts.legend(),
+    data=ChartState.stacked_data,
+    width="100%",
+    height=400
+)
+```
+
+#### Vertical Bar Chart
+```python
+rx.recharts.bar_chart(
+    rx.recharts.bar(
+        data_key="value",
+        fill=rx.color("accent", 9)
+    ),
+    rx.recharts.x_axis(type_="number"),
+    rx.recharts.y_axis(data_key="name", type_="category"),
+    data=ChartState.data,
+    layout="vertical",
+    width="100%",
+    height=400,
+    margin={"top": 20, "right": 30, "left": 20, "bottom": 20}
+)
+```
+
+#### Interactive Bar Chart with State
+```python
+class InteractiveChartState(rx.State):
+    data: list[dict] = [...]
+    
+    def randomize_data(self):
+        import random
+        self.data = [
+            {**item, "value": random.randint(100, 1000)}
+            for item in self.data
+        ]
+
+rx.vstack(
+    rx.recharts.bar_chart(
+        rx.recharts.bar(
+            data_key="value",
+            fill=rx.color("accent", 9),
+            on_click=InteractiveChartState.randomize_data
+        ),
+        rx.recharts.x_axis(data_key="name"),
+        rx.recharts.y_axis(),
+        data=InteractiveChartState.data,
+        width="100%",
+        height=300
+    ),
+    rx.button("Randomize", on_click=InteractiveChartState.randomize_data),
+    spacing="3",
+    width="100%"
+)
+```
+
+### Line Chart (`rx.recharts.line_chart`)
+
+**Purpose**: Show trends and changes over time
+
+**Structure**:
+```python
+rx.recharts.line_chart(
+    rx.recharts.line(data_key="value"),
+    rx.recharts.x_axis(data_key="name"),
+    rx.recharts.y_axis(),
+    data=State.line_data
+)
+```
+
+**Key Line Properties**:
+- `data_key`: Data field to plot
+- `stroke`: Line color
+- `stroke_width`: Line thickness
+- `type_`: "basis" | "linear" | "monotone" | "step" (curve type)
+- `dot`: bool or custom dot component
+- `activate_dot`: Properties for active dot on hover
+
+**Best Practices**:
+
+#### Simple Line Chart
+```python
+rx.recharts.line_chart(
+    rx.recharts.line(
+        data_key="value",
+        stroke=rx.color("accent", 9),
+        stroke_width=2
+    ),
+    rx.recharts.x_axis(data_key="month"),
+    rx.recharts.y_axis(),
+    rx.recharts.cartesian_grid(stroke_dasharray="3 3"),
+    rx.recharts.graphing_tooltip(),
+    data=State.monthly_data,
+    width="100%",
+    height=300
+)
+```
+
+#### Multiple Lines
+```python
+rx.recharts.line_chart(
+    rx.recharts.line(
+        data_key="revenue",
+        stroke=rx.color("blue", 9),
+        name="Revenue",
+        type_="monotone"
+    ),
+    rx.recharts.line(
+        data_key="profit",
+        stroke=rx.color("green", 9),
+        name="Profit",
+        type_="monotone"
+    ),
+    rx.recharts.line(
+        data_key="expenses",
+        stroke=rx.color("red", 9),
+        name="Expenses",
+        type_="monotone"
+    ),
+    rx.recharts.x_axis(data_key="month"),
+    rx.recharts.y_axis(),
+    rx.recharts.cartesian_grid(stroke_dasharray="3 3"),
+    rx.recharts.legend(),
+    rx.recharts.graphing_tooltip(),
+    data=State.financial_data,
+    width="100%",
+    height=400
+)
+```
+
+#### Smooth Curve Line
+```python
+rx.recharts.line_chart(
+    rx.recharts.line(
+        data_key="temperature",
+        stroke=rx.color("orange", 9),
+        type_="monotone",  # Smooth curve
+        dot=False,  # Hide dots
+        stroke_width=3
+    ),
+    rx.recharts.x_axis(data_key="time"),
+    rx.recharts.y_axis(),
+    rx.recharts.graphing_tooltip(),
+    data=State.temperature_data,
+    width="100%",
+    height=300
+)
+```
+
+### Area Chart (`rx.recharts.area_chart`)
+
+**Purpose**: Show cumulative values and filled regions
+
+**Structure**:
+```python
+rx.recharts.area_chart(
+    rx.recharts.area(data_key="value"),
+    rx.recharts.x_axis(data_key="name"),
+    rx.recharts.y_axis(),
+    data=State.area_data
+)
+```
+
+**Key Properties**:
+- `fill`: Fill color
+- `stroke`: Border color
+- `fill_opacity`: Transparency (0-1)
+- `stack_id`: For stacked area charts
+
+**Best Practices**:
+
+#### Simple Area Chart
+```python
+rx.recharts.area_chart(
+    rx.recharts.area(
+        data_key="value",
+        fill=rx.color("blue", 4),
+        stroke=rx.color("blue", 9),
+        type_="monotone"
+    ),
+    rx.recharts.x_axis(data_key="date"),
+    rx.recharts.y_axis(),
+    rx.recharts.cartesian_grid(stroke_dasharray="3 3"),
+    rx.recharts.graphing_tooltip(),
+    data=State.time_series_data,
+    width="100%",
+    height=300
+)
+```
+
+#### Stacked Area Chart
+```python
+rx.recharts.area_chart(
+    rx.recharts.area(
+        data_key="mobile",
+        stack_id="1",
+        fill=rx.color("blue", 7),
+        stroke=rx.color("blue", 9)
+    ),
+    rx.recharts.area(
+        data_key="desktop",
+        stack_id="1",
+        fill=rx.color("green", 7),
+        stroke=rx.color("green", 9)
+    ),
+    rx.recharts.area(
+        data_key="tablet",
+        stack_id="1",
+        fill=rx.color("orange", 7),
+        stroke=rx.color("orange", 9)
+    ),
+    rx.recharts.x_axis(data_key="month"),
+    rx.recharts.y_axis(),
+    rx.recharts.legend(),
+    rx.recharts.graphing_tooltip(),
+    data=State.device_data,
+    width="100%",
+    height=400
+)
+```
+
+### Pie Chart (`rx.recharts.pie_chart`)
+
+**Purpose**: Show proportions and percentages
+
+**Structure**:
+```python
+rx.recharts.pie_chart(
+    rx.recharts.pie(
+        data=State.pie_data,
+        data_key="value",
+        name_key="name"
+    )
+)
+```
+
+**Key Properties**:
+- `cx`: Center X coordinate (can be percentage)
+- `cy`: Center Y coordinate (can be percentage)
+- `inner_radius`: Inner radius for donut charts
+- `outer_radius`: Outer radius
+- `label`: Show labels on slices
+
+**Best Practices**:
+
+#### Simple Pie Chart
+```python
+class PieState(rx.State):
+    data: list[dict] = [
+        {"name": "Group A", "value": 400},
+        {"name": "Group B", "value": 300},
+        {"name": "Group C", "value": 300},
+        {"name": "Group D", "value": 200},
+    ]
+
+rx.recharts.pie_chart(
+    rx.recharts.pie(
+        data=PieState.data,
+        data_key="value",
+        name_key="name",
+        label=True,
+        fill=rx.color("accent", 9)
+    ),
+    rx.recharts.legend(),
+    width="100%",
+    height=400
+)
+```
+
+#### Donut Chart
+```python
+rx.recharts.pie_chart(
+    rx.recharts.pie(
+        data=State.donut_data,
+        data_key="value",
+        name_key="name",
+        cx="50%",
+        cy="50%",
+        inner_radius=60,
+        outer_radius=100,
+        fill=rx.color("accent", 9),
+        label=True
+    ),
+    rx.recharts.graphing_tooltip(),
+    width="100%",
+    height=400
+)
+```
+
+#### Pie Chart with Custom Colors
+```python
+rx.recharts.pie_chart(
+    rx.recharts.pie(
+        rx.foreach(
+            State.colored_data,
+            lambda item: rx.recharts.cell(
+                fill=item["color"]
+            )
+        ),
+        data=State.colored_data,
+        data_key="value",
+        name_key="name"
+    ),
+    rx.recharts.legend(),
+    width="100%",
+    height=400
+)
+```
+
+### Scatter Chart (`rx.recharts.scatter_chart`)
+
+**Purpose**: Show correlation between two variables
+
+**Structure**:
+```python
+rx.recharts.scatter_chart(
+    rx.recharts.scatter(
+        data=State.scatter_data,
+        fill=rx.color("accent", 9)
+    ),
+    rx.recharts.x_axis(data_key="x", type_="number"),
+    rx.recharts.y_axis(data_key="y", type_="number")
+)
+```
+
+**Best Practices**:
+
+#### Simple Scatter Plot
+```python
+rx.recharts.scatter_chart(
+    rx.recharts.scatter(
+        data=State.points,
+        fill=rx.color("blue", 9),
+        name="Data Points"
+    ),
+    rx.recharts.x_axis(data_key="x", type_="number", name="X Axis"),
+    rx.recharts.y_axis(data_key="y", type_="number", name="Y Axis"),
+    rx.recharts.cartesian_grid(stroke_dasharray="3 3"),
+    rx.recharts.graphing_tooltip(cursor={"stroke_dasharray": "3 3"}),
+    width="100%",
+    height=400
+)
+```
+
+#### Multiple Scatter Series
+```python
+rx.recharts.scatter_chart(
+    rx.recharts.scatter(
+        data=State.series_a,
+        fill=rx.color("blue", 9),
+        name="Series A"
+    ),
+    rx.recharts.scatter(
+        data=State.series_b,
+        fill=rx.color("red", 9),
+        name="Series B"
+    ),
+    rx.recharts.x_axis(data_key="x", type_="number"),
+    rx.recharts.y_axis(data_key="y", type_="number"),
+    rx.recharts.legend(),
+    rx.recharts.graphing_tooltip(),
+    width="100%",
+    height=400
+)
+```
+
+### Radar Chart (`rx.recharts.radar_chart`)
+
+**Purpose**: Display multivariate data on radial axes
+
+**Structure**:
+```python
+rx.recharts.radar_chart(
+    rx.recharts.radar(
+        data_key="value",
+        fill=rx.color("accent", 7)
+    ),
+    rx.recharts.polar_grid(),
+    rx.recharts.polar_angle_axis(data_key="subject"),
+    rx.recharts.polar_radius_axis(),
+    data=State.radar_data
+)
+```
+
+**Best Practices**:
+
+#### Skills Radar Chart
+```python
+class SkillsState(rx.State):
+    skills: list[dict] = [
+        {"subject": "Python", "value": 90},
+        {"subject": "JavaScript", "value": 75},
+        {"subject": "SQL", "value": 85},
+        {"subject": "React", "value": 70},
+        {"subject": "Docker", "value": 80},
+    ]
+
+rx.recharts.radar_chart(
+    rx.recharts.radar(
+        data_key="value",
+        stroke=rx.color("blue", 9),
+        fill=rx.color("blue", 5),
+        fill_opacity=0.6
+    ),
+    rx.recharts.polar_grid(),
+    rx.recharts.polar_angle_axis(data_key="subject"),
+    rx.recharts.polar_radius_axis(angle=90, domain=[0, 100]),
+    data=SkillsState.skills,
+    width="100%",
+    height=400
+)
+```
+
+### Composed Chart (`rx.recharts.composed_chart`)
+
+**Purpose**: Combine multiple chart types in one visualization
+
+**Best Practices**:
+
+#### Line + Bar Combination
+```python
+rx.recharts.composed_chart(
+    rx.recharts.bar(
+        data_key="sales",
+        fill=rx.color("blue", 7),
+        name="Sales"
+    ),
+    rx.recharts.line(
+        data_key="profit",
+        stroke=rx.color("green", 9),
+        name="Profit",
+        type_="monotone"
+    ),
+    rx.recharts.x_axis(data_key="month"),
+    rx.recharts.y_axis(),
+    rx.recharts.cartesian_grid(stroke_dasharray="3 3"),
+    rx.recharts.legend(),
+    rx.recharts.graphing_tooltip(),
+    data=State.mixed_data,
+    width="100%",
+    height=400
+)
+```
+
+## Supporting Components
+
+### Axis Components
+
+#### X Axis (`rx.recharts.x_axis`)
+```python
+rx.recharts.x_axis(
+    data_key="name",
+    stroke=rx.color("gray", 9),
+    tick_line=False,
+    axis_line=False,
+    angle=-45,  # Rotate labels
+    text_anchor="end"
+)
+```
+
+#### Y Axis (`rx.recharts.y_axis`)
+```python
+rx.recharts.y_axis(
+    label={"value": "Revenue ($)", "angle": -90, "position": "insideLeft"},
+    domain=[0, "dataMax + 1000"]
+)
+```
+
+### Cartesian Grid (`rx.recharts.cartesian_grid`)
+```python
+rx.recharts.cartesian_grid(
+    stroke_dasharray="3 3",
+    stroke=rx.color("gray", 4)
+)
+```
+
+### Legend (`rx.recharts.legend`)
+```python
+rx.recharts.legend(
+    vertical_align="top",
+    height=36
+)
+```
+
+### Tooltip (`rx.recharts.graphing_tooltip`)
+```python
+rx.recharts.graphing_tooltip(
+    content_style={
+        "background": "white",
+        "border": "1px solid #ccc",
+        "border_radius": "4px"
+    }
+)
+```
+
+### Reference Line (`rx.recharts.reference_line`)
+```python
+# Horizontal reference line
+rx.recharts.reference_line(
+    y=5000,
+    label="Target",
+    stroke="red",
+    stroke_dasharray="3 3"
+)
+
+# Vertical reference line
+rx.recharts.reference_line(
+    x="Mar",
+    stroke="blue",
+    label="Milestone"
+)
+```
+
+### Brush (`rx.recharts.brush`)
+```python
+# Add zooming/panning capability
+rx.recharts.brush(
+    data_key="name",
+    height=30,
+    stroke=rx.color("accent", 9)
+)
+```
+
+## Common Patterns
+
+### Dashboard with Multiple Charts
+```python
+rx.grid(
+    rx.card(
+        rx.vstack(
+            rx.heading("Monthly Sales", size="4"),
+            rx.recharts.bar_chart(
+                rx.recharts.bar(data_key="sales", fill=rx.color("blue", 9)),
+                rx.recharts.x_axis(data_key="month"),
+                rx.recharts.y_axis(),
+                data=State.sales_data,
+                width="100%",
+                height=200
+            ),
+            spacing="2",
+            align="start"
+        )
+    ),
+    rx.card(
+        rx.vstack(
+            rx.heading("Revenue Trend", size="4"),
+            rx.recharts.line_chart(
+                rx.recharts.line(
+                    data_key="revenue",
+                    stroke=rx.color("green", 9),
+                    type_="monotone"
+                ),
+                rx.recharts.x_axis(data_key="month"),
+                rx.recharts.y_axis(),
+                data=State.revenue_data,
+                width="100%",
+                height=200
+            ),
+            spacing="2",
+            align="start"
+        )
+    ),
+    rx.card(
+        rx.vstack(
+            rx.heading("Market Share", size="4"),
+            rx.recharts.pie_chart(
+                rx.recharts.pie(
+                    data=State.market_data,
+                    data_key="value",
+                    name_key="name",
+                    inner_radius=40,
+                    label=True
+                ),
+                width="100%",
+                height=200
+            ),
+            spacing="2",
+            align="start"
+        )
+    ),
+    columns="3",
+    spacing="4",
+    width="100%"
+)
+```
+
+### Responsive Chart Card
+```python
+def chart_card(title: str, chart_component):
+    return rx.card(
+        rx.vstack(
+            rx.hstack(
+                rx.heading(title, size="5"),
+                rx.spacer(),
+                rx.select.root(
+                    rx.select.trigger(placeholder="Period"),
+                    rx.select.content(
+                        rx.select.item("Last 7 days", value="7d"),
+                        rx.select.item("Last 30 days", value="30d"),
+                        rx.select.item("Last year", value="1y")
+                    ),
+                    value=State.period,
+                    on_change=State.set_period
+                ),
+                width="100%",
+                align="center"
+            ),
+            chart_component,
+            spacing="3",
+            width="100%"
+        ),
+        width="100%"
+    )
+```
+
+### Interactive Chart with Filters
+```python
+class ChartFilterState(rx.State):
+    data: list[dict] = []
+    selected_metric: str = "sales"
+    
+    @rx.var(cache=True)
+    def filtered_data(self) -> list[dict]:
+        # Filter and transform data based on state
+        return self.data
+
+rx.vstack(
+    rx.hstack(
+        rx.select.root(
+            rx.select.trigger(placeholder="Metric"),
+            rx.select.content(
+                rx.select.item("Sales", value="sales"),
+                rx.select.item("Revenue", value="revenue"),
+                rx.select.item("Profit", value="profit")
+            ),
+            value=ChartFilterState.selected_metric,
+            on_change=ChartFilterState.set_selected_metric
+        ),
+        spacing="3"
+    ),
+    rx.recharts.line_chart(
+        rx.recharts.line(
+            data_key=ChartFilterState.selected_metric,
+            stroke=rx.color("accent", 9),
+            type_="monotone"
+        ),
+        rx.recharts.x_axis(data_key="date"),
+        rx.recharts.y_axis(),
+        rx.recharts.cartesian_grid(stroke_dasharray="3 3"),
+        rx.recharts.graphing_tooltip(),
+        data=ChartFilterState.filtered_data,
+        width="100%",
+        height=400
+    ),
+    spacing="4",
+    width="100%"
+)
+```
+
+## Best Practices
+
+1. **Set explicit dimensions**: Always specify `width` and `height` (use "100%" for responsive)
+2. **Use color system**: Leverage `rx.color()` for theme consistency
+3. **Add margins**: Include proper margins for labels and axis
+4. **Enable tooltips**: Always add `rx.recharts.graphing_tooltip()` for better UX
+5. **Use legends**: Add `rx.recharts.legend()` for multi-series charts
+6. **Responsive design**: Use percentage widths and container constraints
+7. **Data formatting**: Ensure data is in correct format (list of dicts)
+8. **Performance**: Use cached vars for data transformations
+9. **Accessibility**: Provide meaningful labels and descriptions
+
+## Data Format
+
+All chart data should be a list of dictionaries:
+```python
+data = [
+    {"name": "Category 1", "value": 100},
+    {"name": "Category 2", "value": 200},
+    {"name": "Category 3", "value": 150},
+]
+```
+
+## Performance Tips
+
+- Use `@rx.var(cache=True)` for computed chart data
+- Limit data points for real-time charts (max 50-100)
+- Debounce updates for frequently changing data
+- Use backend-only vars (`_data`) for large datasets
+- Consider pagination for historical data

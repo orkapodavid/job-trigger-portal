@@ -1,0 +1,829 @@
+---
+description: Expert guide for Reflex Layout components including Box, Flex, Grid, Container, Card, Stack, Center, Section, and spacing utilities
+globs:
+  - "**/*.py"
+---
+
+# Reflex Layout Components Expert
+
+You are an expert in Reflex's Layout components, specializing in creating responsive, well-structured page layouts with proper spacing and alignment.
+
+## Core Layout Components
+
+### Box Component (`rx.box`)
+
+**Purpose**: Generic container based on `div`, primary use is applying styles
+
+**Key Characteristics**:
+- Renders as block element by default
+- No specific props (uses CSS props)
+- Foundation for layout building
+
+**Best Practices**:
+```python
+# Basic container
+rx.box(
+    rx.text("Content here"),
+    padding="4",
+    background="blue"
+)
+
+# With background gradient
+rx.box(
+    rx.heading("Hero Section"),
+    background="linear-gradient(to right, blue, purple)",
+    padding="8",
+    border_radius="lg"
+)
+
+# Styled sections
+rx.box(
+    rx.vstack(
+        rx.heading("Features"),
+        rx.text("Description"),
+        spacing="2"
+    ),
+    padding="6",
+    background_color="var(--gray-2)",
+    border_radius="md"
+)
+```
+
+### Flex Component (`rx.flex`)
+
+**Purpose**: Flexbox container for flexible layouts
+
+**Key Properties**:
+- `direction`: "row" | "column" | "row-reverse" | "column-reverse"
+- `align`: Align items on cross axis
+- `justify`: Justify content on main axis
+- `wrap`: "nowrap" | "wrap" | "wrap-reverse"
+- `gap`: Space between items
+- `spacing`: Shorthand for gap
+
+**Best Practices**:
+```python
+# Horizontal layout
+rx.flex(
+    rx.box("Item 1"),
+    rx.box("Item 2"),
+    rx.box("Item 3"),
+    direction="row",
+    spacing="3",
+    align="center"
+)
+
+# Responsive navigation
+rx.flex(
+    rx.heading("Logo", size="6"),
+    rx.flex(
+        rx.link("Home", href="/"),
+        rx.link("About", href="/about"),
+        rx.link("Contact", href="/contact"),
+        spacing="4"
+    ),
+    justify="between",
+    align="center",
+    padding="4"
+)
+
+# Card layout with wrapping
+rx.flex(
+    rx.foreach(
+        State.items,
+        lambda item: rx.card(item.name)
+    ),
+    wrap="wrap",
+    gap="4"
+)
+```
+
+### Stack Components (`rx.vstack`, `rx.hstack`)
+
+**Purpose**: Simplified vertical and horizontal stacking
+
+**Key Properties**:
+- `spacing`: Space between children
+- `align`: Align items on cross axis
+- `justify`: Justify content on main axis
+- `width`: Container width
+- `height`: Container height
+
+**Best Practices**:
+```python
+# Vertical stack (vstack)
+rx.vstack(
+    rx.heading("Title"),
+    rx.text("Description"),
+    rx.button("Action"),
+    spacing="3",
+    align="start",
+    width="100%"
+)
+
+# Horizontal stack (hstack)
+rx.hstack(
+    rx.icon("user"),
+    rx.text("Profile"),
+    spacing="2",
+    align="center"
+)
+
+# Nested stacks for complex layouts
+rx.vstack(
+    rx.heading("Dashboard"),
+    rx.hstack(
+        rx.card(
+            rx.vstack(
+                rx.text("Metric 1"),
+                rx.heading("1,234"),
+                spacing="1"
+            )
+        ),
+        rx.card(
+            rx.vstack(
+                rx.text("Metric 2"),
+                rx.heading("5,678"),
+                spacing="1"
+            )
+        ),
+        spacing="4",
+        width="100%"
+    ),
+    spacing="4",
+    width="100%"
+)
+
+# Justify between pattern
+rx.hstack(
+    rx.text("Label"),
+    rx.badge("Value"),
+    justify="between",
+    width="100%"
+)
+```
+
+### Grid Component (`rx.grid`)
+
+**Purpose**: CSS Grid layout for complex grid structures
+
+**Key Properties**:
+- `columns`: Number of columns or template
+- `rows`: Number of rows or template
+- `gap`: Gap between grid items
+- `spacing`: Shorthand for gap
+- `flow`: "row" | "column" | "dense" | "row-dense" | "column-dense"
+
+**Best Practices**:
+```python
+# Simple grid
+rx.grid(
+    rx.card("Item 1"),
+    rx.card("Item 2"),
+    rx.card("Item 3"),
+    rx.card("Item 4"),
+    columns="2",
+    spacing="4"
+)
+
+# Responsive grid
+rx.grid(
+    rx.foreach(
+        State.products,
+        lambda product: rx.card(
+            rx.vstack(
+                rx.image(src=product.image),
+                rx.heading(product.name, size="4"),
+                rx.text(f"${product.price}"),
+                spacing="2"
+            )
+        )
+    ),
+    columns="repeat(auto-fit, minmax(250px, 1fr))",
+    gap="4"
+)
+
+# Dashboard grid
+rx.grid(
+    rx.card("Header", grid_column="1 / -1"),
+    rx.card("Sidebar", grid_row="span 2"),
+    rx.card("Main Content"),
+    rx.card("Widget"),
+    rx.card("Footer", grid_column="1 / -1"),
+    columns="200px 1fr 1fr",
+    rows="auto 1fr auto",
+    gap="4",
+    height="100vh"
+)
+```
+
+### Container Component (`rx.container`)
+
+**Purpose**: Centered container with max-width constraint
+
+**Key Properties**:
+- `size`: "1" | "2" | "3" | "4" (controls max-width)
+- `px`: Horizontal padding
+- `py`: Vertical padding
+
+**Best Practices**:
+```python
+# Content container
+rx.container(
+    rx.vstack(
+        rx.heading("Welcome"),
+        rx.text("This content is centered and constrained"),
+        spacing="4"
+    ),
+    size="3"
+)
+
+# Full-width sections with contained content
+def page():
+    return rx.vstack(
+        rx.box(
+            rx.container(
+                rx.heading("Hero Section"),
+                size="4"
+            ),
+            background="blue",
+            width="100%",
+            padding_y="8"
+        ),
+        rx.container(
+            rx.vstack(
+                rx.heading("Main Content"),
+                rx.text("Regular content here"),
+                spacing="4"
+            ),
+            size="3",
+            padding_y="8"
+        ),
+        spacing="0",
+        width="100%"
+    )
+```
+
+### Card Component (`rx.card`)
+
+**Purpose**: Container with default styling for card-like elements
+
+**Key Properties**:
+- `size`: "1" | "2" | "3" | "4" | "5"
+- `variant`: "surface" | "classic" | "ghost"
+
+**Best Practices**:
+```python
+# Simple card
+rx.card(
+    rx.vstack(
+        rx.heading("Card Title", size="4"),
+        rx.text("Card description goes here"),
+        spacing="2"
+    )
+)
+
+# Feature card
+rx.card(
+    rx.vstack(
+        rx.icon("zap", size=32, color="blue"),
+        rx.heading("Fast Performance", size="4"),
+        rx.text("Lightning-fast response times"),
+        rx.button("Learn More"),
+        spacing="3",
+        align="center"
+    ),
+    size="3"
+)
+
+# Card grid
+rx.grid(
+    rx.card(
+        rx.vstack(
+            rx.heading("Card 1"),
+            rx.text("Content"),
+            spacing="2"
+        )
+    ),
+    rx.card(
+        rx.vstack(
+            rx.heading("Card 2"),
+            rx.text("Content"),
+            spacing="2"
+        )
+    ),
+    rx.card(
+        rx.vstack(
+            rx.heading("Card 3"),
+            rx.text("Content"),
+            spacing="2"
+        )
+    ),
+    columns="3",
+    spacing="4"
+)
+```
+
+### Center Component (`rx.center`)
+
+**Purpose**: Center content both horizontally and vertically
+
+**Best Practices**:
+```python
+# Full-page centered content
+rx.center(
+    rx.vstack(
+        rx.spinner(size="3"),
+        rx.text("Loading..."),
+        spacing="3"
+    ),
+    height="100vh"
+)
+
+# Centered error message
+rx.center(
+    rx.card(
+        rx.vstack(
+            rx.icon("alert-circle", size=48, color="red"),
+            rx.heading("Error", size="6"),
+            rx.text("Something went wrong"),
+            rx.button("Try Again", on_click=State.retry),
+            spacing="3",
+            align="center"
+        )
+    ),
+    padding="8"
+)
+```
+
+### Section Component (`rx.section`)
+
+**Purpose**: Semantic section element with built-in spacing
+
+**Key Properties**:
+- `size`: "1" | "2" | "3" (controls padding)
+
+**Best Practices**:
+```python
+# Page sections
+rx.vstack(
+    rx.section(
+        rx.container(
+            rx.vstack(
+                rx.heading("Section 1"),
+                rx.text("Content"),
+                spacing="4"
+            ),
+            size="3"
+        ),
+        size="3"
+    ),
+    rx.section(
+        rx.container(
+            rx.vstack(
+                rx.heading("Section 2"),
+                rx.text("Content"),
+                spacing="4"
+            ),
+            size="3"
+        ),
+        size="2"
+    ),
+    spacing="0",
+    width="100%"
+)
+```
+
+### Separator Component (`rx.separator`)
+
+**Purpose**: Visual divider between content
+
+**Key Properties**:
+- `size`: "1" | "2" | "3" | "4"
+- `orientation`: "horizontal" | "vertical"
+- `decorative`: bool
+
+**Best Practices**:
+```python
+# Horizontal separator
+rx.vstack(
+    rx.text("Above"),
+    rx.separator(),
+    rx.text("Below"),
+    spacing="3",
+    width="100%"
+)
+
+# Vertical separator in horizontal layout
+rx.hstack(
+    rx.text("Left"),
+    rx.separator(orientation="vertical"),
+    rx.text("Right"),
+    spacing="3",
+    height="50px"
+)
+
+# Section dividers
+rx.vstack(
+    rx.heading("Features"),
+    rx.separator(size="4"),
+    rx.grid(
+        # Features here
+        columns="3",
+        spacing="4"
+    ),
+    spacing="4",
+    width="100%"
+)
+```
+
+### Spacer Component (`rx.spacer`)
+
+**Purpose**: Flexible space that grows to fill available space
+
+**Best Practices**:
+```python
+# Push elements to edges
+rx.hstack(
+    rx.text("Left"),
+    rx.spacer(),
+    rx.text("Right"),
+    width="100%"
+)
+
+# Navigation bar
+rx.hstack(
+    rx.heading("Logo"),
+    rx.spacer(),
+    rx.hstack(
+        rx.link("Home"),
+        rx.link("About"),
+        rx.link("Contact"),
+        spacing="4"
+    ),
+    width="100%",
+    padding="4"
+)
+```
+
+### Aspect Ratio Component (`rx.aspect_ratio`)
+
+**Purpose**: Maintain consistent aspect ratio for content
+
+**Key Properties**:
+- `ratio`: Aspect ratio (e.g., 16/9, 1, 4/3)
+
+**Best Practices**:
+```python
+# Video container
+rx.aspect_ratio(
+    rx.video(src="/video.mp4"),
+    ratio=16/9
+)
+
+# Image grid with consistent ratios
+rx.grid(
+    rx.foreach(
+        State.images,
+        lambda img: rx.aspect_ratio(
+            rx.image(src=img.url),
+            ratio=1  # Square
+        )
+    ),
+    columns="4",
+    spacing="2"
+)
+```
+
+### Fragment Component (`rx.fragment`)
+
+**Purpose**: Group elements without adding DOM node
+
+**Best Practices**:
+```python
+# Conditional groups
+rx.cond(
+    State.show_details,
+    rx.fragment(
+        rx.text("Detail 1"),
+        rx.text("Detail 2"),
+        rx.text("Detail 3")
+    )
+)
+
+# In foreach
+rx.vstack(
+    rx.foreach(
+        State.items,
+        lambda item: rx.fragment(
+            rx.heading(item.name),
+            rx.text(item.description),
+            rx.separator()
+        )
+    )
+)
+```
+
+### Inset Component (`rx.inset`)
+
+**Purpose**: Create inset content within containers
+
+**Key Properties**:
+- `side`: "top" | "bottom" | "left" | "right" | "all"
+- `clip`: "padding-box" | "border-box"
+
+**Best Practices**:
+```python
+# Card with image inset
+rx.card(
+    rx.inset(
+        rx.image(src="/header.jpg"),
+        side="top"
+    ),
+    rx.vstack(
+        rx.heading("Card Title"),
+        rx.text("Description"),
+        spacing="2",
+        padding="4"
+    )
+)
+```
+
+## Layout Patterns
+
+### Dashboard Layout
+```python
+def dashboard():
+    return rx.grid(
+        # Header
+        rx.box(
+            rx.container(
+                rx.hstack(
+                    rx.heading("Dashboard"),
+                    rx.spacer(),
+                    rx.button("Profile"),
+                    width="100%"
+                ),
+                size="4"
+            ),
+            grid_column="1 / -1",
+            background="var(--accent-3)",
+            padding="4"
+        ),
+        # Sidebar
+        rx.box(
+            rx.vstack(
+                rx.link("Overview", href="/"),
+                rx.link("Analytics", href="/analytics"),
+                rx.link("Settings", href="/settings"),
+                spacing="2",
+                align="start"
+            ),
+            padding="4",
+            background="var(--gray-2)"
+        ),
+        # Main content
+        rx.box(
+            rx.container(
+                rx.vstack(
+                    rx.heading("Overview"),
+                    rx.grid(
+                        rx.card("Metric 1"),
+                        rx.card("Metric 2"),
+                        rx.card("Metric 3"),
+                        columns="3",
+                        spacing="4"
+                    ),
+                    spacing="4",
+                    width="100%"
+                ),
+                size="4"
+            ),
+            padding="4"
+        ),
+        columns="250px 1fr",
+        rows="auto 1fr",
+        height="100vh",
+        gap="0"
+    )
+```
+
+### Landing Page Layout
+```python
+def landing_page():
+    return rx.vstack(
+        # Hero section
+        rx.box(
+            rx.container(
+                rx.vstack(
+                    rx.heading("Welcome", size="9"),
+                    rx.text("Build amazing apps", size="5"),
+                    rx.hstack(
+                        rx.button("Get Started", size="4"),
+                        rx.button("Learn More", variant="outline", size="4"),
+                        spacing="3"
+                    ),
+                    spacing="4",
+                    align="center"
+                ),
+                size="4"
+            ),
+            background="linear-gradient(to bottom, blue, purple)",
+            padding_y="16",
+            width="100%"
+        ),
+        # Features section
+        rx.section(
+            rx.container(
+                rx.vstack(
+                    rx.heading("Features", size="7", align="center"),
+                    rx.grid(
+                        rx.card(
+                            rx.vstack(
+                                rx.icon("zap", size=48),
+                                rx.heading("Fast"),
+                                rx.text("Lightning speed"),
+                                spacing="2",
+                                align="center"
+                            )
+                        ),
+                        rx.card(
+                            rx.vstack(
+                                rx.icon("shield", size=48),
+                                rx.heading("Secure"),
+                                rx.text("Bank-level security"),
+                                spacing="2",
+                                align="center"
+                            )
+                        ),
+                        rx.card(
+                            rx.vstack(
+                                rx.icon("smartphone", size=48),
+                                rx.heading("Responsive"),
+                                rx.text("Works everywhere"),
+                                spacing="2",
+                                align="center"
+                            )
+                        ),
+                        columns="3",
+                        spacing="4"
+                    ),
+                    spacing="6",
+                    width="100%"
+                ),
+                size="4"
+            ),
+            size="3"
+        ),
+        # Footer
+        rx.box(
+            rx.container(
+                rx.vstack(
+                    rx.separator(),
+                    rx.hstack(
+                        rx.text("© 2024 Company"),
+                        rx.spacer(),
+                        rx.hstack(
+                            rx.link("Privacy"),
+                            rx.link("Terms"),
+                            rx.link("Contact"),
+                            spacing="4"
+                        ),
+                        width="100%"
+                    ),
+                    spacing="4",
+                    width="100%"
+                ),
+                size="4"
+            ),
+            padding_y="8",
+            background="var(--gray-2)",
+            width="100%"
+        ),
+        spacing="0",
+        width="100%"
+    )
+```
+
+### Card Grid Pattern
+```python
+rx.container(
+    rx.vstack(
+        rx.heading("Products"),
+        rx.grid(
+            rx.foreach(
+                State.products,
+                lambda product: rx.card(
+                    rx.vstack(
+                        rx.aspect_ratio(
+                            rx.image(src=product.image),
+                            ratio=4/3
+                        ),
+                        rx.heading(product.name, size="4"),
+                        rx.text(product.description, size="2"),
+                        rx.hstack(
+                            rx.text(f"${product.price}", weight="bold"),
+                            rx.spacer(),
+                            rx.button("Add to Cart"),
+                            width="100%"
+                        ),
+                        spacing="3",
+                        align="start"
+                    )
+                )
+            ),
+            columns="repeat(auto-fit, minmax(300px, 1fr))",
+            spacing="4"
+        ),
+        spacing="4",
+        width="100%"
+    ),
+    size="4",
+    padding_y="8"
+)
+```
+
+### Sidebar Layout
+```python
+rx.flex(
+    # Sidebar
+    rx.box(
+        rx.vstack(
+            rx.heading("Navigation"),
+            rx.separator(),
+            rx.vstack(
+                rx.link("Dashboard", href="/"),
+                rx.link("Profile", href="/profile"),
+                rx.link("Settings", href="/settings"),
+                spacing="2",
+                align="start",
+                width="100%"
+            ),
+            spacing="4",
+            width="100%"
+        ),
+        width="250px",
+        padding="4",
+        background="var(--gray-2)",
+        height="100vh"
+    ),
+    # Main content
+    rx.box(
+        rx.container(
+            # Content here
+            size="4"
+        ),
+        flex="1",
+        padding="4",
+        overflow_y="auto"
+    ),
+    width="100%"
+)
+```
+
+## Responsive Design Patterns
+
+```python
+# Responsive grid
+rx.grid(
+    # Items
+    columns=rx.breakpoints(
+        initial="1",
+        sm="2",
+        md="3",
+        lg="4"
+    ),
+    spacing="4"
+)
+
+# Responsive stack direction
+rx.flex(
+    rx.box("Item 1"),
+    rx.box("Item 2"),
+    direction=rx.breakpoints(
+        initial="column",
+        md="row"
+    ),
+    spacing="4"
+)
+```
+
+## Best Practices
+
+1. **Use semantic components**: Prefer `rx.vstack`/`rx.hstack` over `rx.flex` when simple
+2. **Container consistency**: Wrap page content in `rx.container` for max-width control
+3. **Spacing consistency**: Use consistent spacing values (multiples of base unit)
+4. **Grid over flexbox**: Use `rx.grid` for 2D layouts, `rx.flex` for 1D layouts
+5. **Card component**: Use for visually distinct content blocks
+6. **Responsive design**: Use breakpoints for mobile-first responsive layouts
+7. **Semantic HTML**: Use `rx.section` for page sections
+8. **Performance**: Use `rx.fragment` to avoid unnecessary DOM nodes
+
+## Accessibility
+
+- Use semantic HTML elements
+- Maintain logical heading hierarchy
+- Ensure sufficient spacing for touch targets
+- Test layouts at different zoom levels
+- Provide adequate color contrast
+- Ensure keyboard navigation works properly

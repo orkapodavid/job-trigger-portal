@@ -1,0 +1,1380 @@
+---
+description: Guide for implementing AG Chart components in Reflex applications with chart types, configuration, and best practices
+globs:
+  - "**/*.py"
+---
+
+# Reflex AG Chart Guide
+
+You are an expert in implementing AG Chart components in Reflex applications, specializing in creating interactive, responsive data visualization charts with professional-grade features.
+
+## Core Setup
+
+### Required Imports
+
+```python
+import reflex as rx
+import reflex_enterprise as rxe
+from reflex_enterprise import ag_chart
+```
+
+### Basic AG Chart Structure
+
+Every AG Chart requires the `options` prop with configuration dictionary:
+
+```python
+ag_chart(
+    id="unique_chart_id",          # REQUIRED: Unique identifier
+    options=State.chart_options,   # REQUIRED: Chart configuration dict
+    width="100%",                  # Responsive width
+    height="400px",                # Fixed or responsive height
+)
+```
+
+**CRITICAL**: Each chart on a page MUST have a unique `id`. Multiple charts with the same ID will cause rendering issues.
+
+## Chart Configuration Structure
+
+The `options` dictionary must contain these essential properties:
+
+```python
+chart_options = {
+    "data": [                      # REQUIRED: List of data dictionaries
+        {"category": "A", "value": 100},
+        {"category": "B", "value": 200},
+        {"category": "C", "value": 150},
+    ],
+    "series": [                    # REQUIRED: List of series configurations
+        {
+            "type": "bar",         # Chart type
+            "xKey": "category",    # X-axis data key
+            "yKey": "value",       # Y-axis data key
+        }
+    ],
+}
+```
+
+## Chart Types & Series
+
+### Bar Charts
+
+**Vertical Bar Chart (Column)**:
+```python
+class BarChartState(rx.State):
+    chart_options: dict = {
+        "data": [
+            {"month": "Jan", "sales": 4000, "expenses": 2400},
+            {"month": "Feb", "sales": 3000, "expenses": 1398},
+            {"month": "Mar", "sales": 2000, "expenses": 9800},
+            {"month": "Apr", "sales": 2780, "expenses": 3908},
+            {"month": "May", "sales": 1890, "expenses": 4800},
+        ],
+        "series": [
+            {
+                "type": "bar",
+                "xKey": "month",
+                "yKey": "sales",
+                "fill": "#3b82f6",        # Blue color
+                "stroke": "#1e40af",      # Darker blue border
+                "strokeWidth": 2,
+            }
+        ],
+        "axes": [
+            {
+                "type": "category",
+                "position": "bottom",
+                "title": {"text": "Month"}
+            },
+            {
+                "type": "number", 
+                "position": "left",
+                "title": {"text": "Sales ($)"}
+            }
+        ]
+    }
+```
+
+**Horizontal Bar Chart**:
+```python
+horizontal_bar_options = {
+    "data": data,
+    "series": [
+        {
+            "type": "bar",
+            "direction": "horizontal",    # Key difference
+            "xKey": "value",             # Switched: value on x-axis
+            "yKey": "category",          # category on y-axis
+        }
+    ]
+}
+```
+
+**Grouped Bar Chart (Multiple Series)**:
+```python
+grouped_bar_options = {
+    "data": data,
+    "series": [
+        {
+            "type": "bar",
+            "xKey": "month",
+            "yKey": "sales",
+            "name": "Sales",
+            "fill": "#3b82f6",
+        },
+        {
+            "type": "bar",
+            "xKey": "month", 
+            "yKey": "expenses",
+            "name": "Expenses",
+            "fill": "#ef4444",
+        }
+    ]
+}
+```
+
+**Stacked Bar Chart**:
+```python
+stacked_bar_options = {
+    "data": data,
+    "series": [
+        {
+            "type": "bar",
+            "xKey": "month",
+            "yKey": "desktop",
+            "name": "Desktop",
+            "stacked": True,             # Enable stacking
+            "fill": "#3b82f6",
+        },
+        {
+            "type": "bar",
+            "xKey": "month",
+            "yKey": "mobile", 
+            "name": "Mobile",
+            "stacked": True,             # Same stack group
+            "fill": "#10b981",
+        }
+    ]
+}
+```
+
+### Line Charts
+
+**Simple Line Chart**:
+```python
+line_chart_options = {
+    "data": [
+        {"date": "2024-01", "temperature": 15.2},
+        {"date": "2024-02", "temperature": 18.7},
+        {"date": "2024-03", "temperature": 22.1},
+    ],
+    "series": [
+        {
+            "type": "line",
+            "xKey": "date",
+            "yKey": "temperature", 
+            "stroke": "#f59e0b",         # Line color
+            "strokeWidth": 3,            # Line thickness
+            "marker": {                  # Data point markers
+                "enabled": True,
+                "fill": "#f59e0b",
+                "stroke": "#ffffff",
+                "strokeWidth": 2,
+                "size": 6,
+            }
+        }
+    ],
+    "axes": [
+        {
+            "type": "category",
+            "position": "bottom",
+            "title": {"text": "Date"}
+        },
+        {
+            "type": "number",
+            "position": "left", 
+            "title": {"text": "Temperature (°C)"}
+        }
+    ]
+}
+```
+
+**Multi-Line Chart**:
+```python
+multi_line_options = {
+    "data": data,
+    "series": [
+        {
+            "type": "line",
+            "xKey": "month",
+            "yKey": "revenue",
+            "name": "Revenue",
+            "stroke": "#10b981",
+            "strokeWidth": 2,
+        },
+        {
+            "type": "line", 
+            "xKey": "month",
+            "yKey": "profit",
+            "name": "Profit",
+            "stroke": "#3b82f6",
+            "strokeWidth": 2,
+        },
+        {
+            "type": "line",
+            "xKey": "month", 
+            "yKey": "expenses",
+            "name": "Expenses",
+            "stroke": "#ef4444",
+            "strokeWidth": 2,
+        }
+    ]
+}
+```
+
+**Smooth Line Chart**:
+```python
+smooth_line_options = {
+    "data": data,
+    "series": [
+        {
+            "type": "line",
+            "xKey": "time",
+            "yKey": "value",
+            "smooth": True,              # Smooth curve interpolation
+            "stroke": "#8b5cf6",
+            "strokeWidth": 3,
+            "marker": {"enabled": False} # Hide individual markers
+        }
+    ]
+}
+```
+
+### Area Charts
+
+**Simple Area Chart**:
+```python
+area_chart_options = {
+    "data": data,
+    "series": [
+        {
+            "type": "area",
+            "xKey": "date",
+            "yKey": "value",
+            "fill": "#3b82f6",           # Fill color
+            "fillOpacity": 0.3,          # Transparency
+            "stroke": "#1e40af",         # Border color
+            "strokeWidth": 2,
+        }
+    ]
+}
+```
+
+**Stacked Area Chart**:
+```python
+stacked_area_options = {
+    "data": data,
+    "series": [
+        {
+            "type": "area",
+            "xKey": "month",
+            "yKey": "mobile",
+            "name": "Mobile",
+            "stacked": True,
+            "fill": "#3b82f6",
+            "fillOpacity": 0.7,
+        },
+        {
+            "type": "area",
+            "xKey": "month",
+            "yKey": "desktop", 
+            "name": "Desktop",
+            "stacked": True,
+            "fill": "#10b981",
+            "fillOpacity": 0.7,
+        },
+        {
+            "type": "area",
+            "xKey": "month",
+            "yKey": "tablet",
+            "name": "Tablet", 
+            "stacked": True,
+            "fill": "#f59e0b",
+            "fillOpacity": 0.7,
+        }
+    ]
+}
+```
+
+### Scatter Charts
+
+**Basic Scatter Plot**:
+```python
+scatter_chart_options = {
+    "data": [
+        {"x": 10, "y": 20, "size": 15},
+        {"x": 15, "y": 25, "size": 20},
+        {"x": 20, "y": 18, "size": 12},
+    ],
+    "series": [
+        {
+            "type": "scatter",
+            "xKey": "x",
+            "yKey": "y", 
+            "fill": "#8b5cf6",
+            "stroke": "#7c3aed",
+            "strokeWidth": 2,
+            "marker": {
+                "size": 8,               # Fixed size
+                "maxSize": 20,           # Or use size key for variable sizes
+            }
+        }
+    ],
+    "axes": [
+        {
+            "type": "number",
+            "position": "bottom",
+            "title": {"text": "X Axis"}
+        },
+        {
+            "type": "number",
+            "position": "left",
+            "title": {"text": "Y Axis"}
+        }
+    ]
+}
+```
+
+**Bubble Chart (Variable Size Scatter)**:
+```python
+bubble_chart_options = {
+    "data": data,
+    "series": [
+        {
+            "type": "scatter",
+            "xKey": "gdp", 
+            "yKey": "lifeExpectancy",
+            "sizeKey": "population",     # Variable bubble size
+            "name": "Countries",
+            "fill": "#06b6d4",
+            "fillOpacity": 0.7,
+            "stroke": "#0891b2",
+            "marker": {
+                "maxSize": 30,           # Maximum bubble size
+                "minSize": 5,            # Minimum bubble size  
+            }
+        }
+    ]
+}
+```
+
+### Pie Charts
+
+**Simple Pie Chart**:
+```python
+pie_chart_options = {
+    "data": [
+        {"category": "Desktop", "value": 60.5},
+        {"category": "Mobile", "value": 30.2},
+        {"category": "Tablet", "value": 9.3},
+    ],
+    "series": [
+        {
+            "type": "pie",
+            "angleKey": "value",         # Value determines slice size
+            "calloutLabelKey": "category", # Label displayed
+            "innerRadiusRatio": 0,       # 0 = pie, >0 = donut
+            "fills": [                   # Custom colors per slice
+                "#3b82f6",
+                "#10b981", 
+                "#f59e0b"
+            ],
+            "strokes": [
+                "#1e40af",
+                "#059669",
+                "#d97706"
+            ],
+            "strokeWidth": 2,
+        }
+    ]
+}
+```
+
+**Donut Chart**:
+```python
+donut_chart_options = {
+    "data": data,
+    "series": [
+        {
+            "type": "pie",
+            "angleKey": "value",
+            "calloutLabelKey": "category",
+            "innerRadiusRatio": 0.6,     # Creates donut hole (0-1)
+            "innerLabels": [             # Center text
+                {
+                    "text": "Total",
+                    "fontSize": 18,
+                    "fontWeight": "bold"
+                },
+                {
+                    "text": "100%", 
+                    "fontSize": 24,
+                    "color": "#374151"
+                }
+            ]
+        }
+    ]
+}
+```
+
+### Histogram Charts
+
+**Basic Histogram**:
+```python
+histogram_options = {
+    "data": [
+        {"value": 1.2}, {"value": 2.1}, {"value": 1.8},
+        {"value": 3.2}, {"value": 2.8}, {"value": 1.5},
+    ],
+    "series": [
+        {
+            "type": "histogram",
+            "xKey": "value",
+            "xName": "Values",
+            "fill": "#6366f1",
+            "stroke": "#4f46e5",
+            "strokeWidth": 1,
+            "binCount": 10,              # Number of bins
+            "aggregation": "count",      # count, sum, mean
+        }
+    ]
+}
+```
+
+### Combination Charts
+
+**Mixed Line + Bar Chart**:
+```python
+combination_options = {
+    "data": data,
+    "series": [
+        {
+            "type": "bar",
+            "xKey": "month",
+            "yKey": "sales",
+            "name": "Sales",
+            "fill": "#3b82f6",
+        },
+        {
+            "type": "line",
+            "xKey": "month",
+            "yKey": "profit",
+            "name": "Profit",
+            "stroke": "#10b981",
+            "strokeWidth": 3,
+            "yKey": "profit",
+            "yName": "Profit %"
+        }
+    ],
+    "axes": [
+        {
+            "type": "category",
+            "position": "bottom"
+        },
+        {
+            "type": "number",
+            "position": "left",
+            "keys": ["sales"],           # Left axis for sales
+            "title": {"text": "Sales ($)"}
+        },
+        {
+            "type": "number", 
+            "position": "right",
+            "keys": ["profit"],          # Right axis for profit
+            "title": {"text": "Profit (%)"}
+        }
+    ]
+}
+```
+
+## Chart Configuration Options
+
+### Axes Configuration
+
+**Category Axis (X-axis for categorical data)**:
+```python
+"axes": [
+    {
+        "type": "category",
+        "position": "bottom",         # bottom, top
+        "title": {
+            "text": "Categories",
+            "fontSize": 14,
+            "fontWeight": "bold"
+        },
+        "label": {
+            "rotation": -45,          # Rotate labels
+            "fontSize": 12,
+            "color": "#374151"
+        },
+        "line": {
+            "width": 1,
+            "color": "#d1d5db"
+        },
+        "tick": {
+            "width": 1,
+            "size": 6,
+            "color": "#9ca3af"
+        },
+        "gridLine": {
+            "style": [                # Dashed grid lines
+                {"stroke": "#e5e7eb", "lineDash": [5, 5]}
+            ]
+        }
+    }
+]
+```
+
+**Number Axis (Y-axis for numerical data)**:
+```python
+"axes": [
+    {
+        "type": "number",
+        "position": "left",           # left, right
+        "title": {"text": "Values"},
+        "min": 0,                     # Fixed minimum
+        "max": 1000,                  # Fixed maximum (optional)
+        "nice": True,                 # Round to nice numbers
+        "label": {
+            "format": ",.0f",         # Number formatting
+            "fontSize": 11
+        }
+    }
+]
+```
+
+**Time Axis (for time-series data)**:
+```python
+"axes": [
+    {
+        "type": "time",
+        "position": "bottom",
+        "title": {"text": "Date"},
+        "label": {
+            "format": "%b %Y",        # Date formatting
+            "rotation": 0
+        },
+        "min": "2024-01-01",          # Date range
+        "max": "2024-12-31"
+    }
+]
+```
+
+### Legend Configuration
+
+```python
+chart_options = {
+    # ... data and series
+    "legend": {
+        "enabled": True,
+        "position": "bottom",         # top, bottom, left, right
+        "spacing": 20,                # Space between legend and chart
+        "item": {
+            "label": {
+                "fontSize": 12,
+                "fontFamily": "Arial",
+                "color": "#374151"
+            },
+            "marker": {
+                "size": 15,           # Legend marker size
+                "strokeWidth": 0
+            },
+            "paddingX": 16,           # Horizontal spacing
+            "paddingY": 8             # Vertical spacing
+        }
+    }
+}
+```
+
+### Tooltips Configuration
+
+```python
+chart_options = {
+    # ... data and series
+    "tooltip": {
+        "enabled": True,
+        "tracking": True,             # Follow mouse
+        "delay": 0,                   # Show delay (ms)
+        "class": "custom-tooltip",    # CSS class
+        "renderer": "function(params) { return '<b>' + params.yKey + '</b>: ' + params.yValue; }"
+    }
+}
+```
+
+### Animation Configuration
+
+```python
+chart_options = {
+    # ... data and series  
+    "animation": {
+        "enabled": True,
+        "duration": 1000,             # Animation duration (ms)
+        "easing": "easeOutQuart"      # Easing function
+    }
+}
+```
+
+### Background and Padding
+
+```python
+chart_options = {
+    # ... data and series
+    "background": {
+        "fill": "#ffffff",            # Background color
+        "visible": True
+    },
+    "padding": {
+        "top": 20,
+        "right": 20, 
+        "bottom": 40,
+        "left": 60
+    }
+}
+```
+
+## Dynamic Chart Patterns
+
+### Interactive Chart with State Management
+
+```python
+class InteractiveChartState(rx.State):
+    chart_type: str = "bar"
+    time_period: str = "monthly"
+    selected_metrics: list[str] = ["sales", "profit"]
+    
+    # Sample data
+    monthly_data: list[dict] = [
+        {"month": "Jan", "sales": 4000, "profit": 1200, "expenses": 2800},
+        {"month": "Feb", "sales": 3000, "profit": 900, "expenses": 2100},
+        {"month": "Mar", "sales": 2000, "profit": 600, "expenses": 1400},
+    ]
+    
+    @rx.var(cache=True)
+    def chart_options(self) -> dict:
+        """Generate chart options based on current state."""
+        
+        # Base series configuration
+        series = []
+        colors = {"sales": "#3b82f6", "profit": "#10b981", "expenses": "#ef4444"}
+        
+        for metric in self.selected_metrics:
+            if self.chart_type == "line":
+                series.append({
+                    "type": "line",
+                    "xKey": "month",
+                    "yKey": metric,
+                    "name": metric.title(),
+                    "stroke": colors.get(metric, "#6b7280"),
+                    "strokeWidth": 3,
+                    "marker": {"enabled": True, "size": 6}
+                })
+            else:  # bar chart
+                series.append({
+                    "type": "bar", 
+                    "xKey": "month",
+                    "yKey": metric,
+                    "name": metric.title(),
+                    "fill": colors.get(metric, "#6b7280")
+                })
+        
+        return {
+            "data": self.monthly_data,
+            "series": series,
+            "axes": [
+                {
+                    "type": "category",
+                    "position": "bottom",
+                    "title": {"text": "Month"}
+                },
+                {
+                    "type": "number",
+                    "position": "left", 
+                    "title": {"text": "Amount ($)"}
+                }
+            ],
+            "legend": {"enabled": True, "position": "top"}
+        }
+    
+    def toggle_chart_type(self):
+        """Switch between bar and line chart."""
+        self.chart_type = "line" if self.chart_type == "bar" else "bar"
+    
+    def update_metrics(self, metrics: list[str]):
+        """Update selected metrics to display."""
+        self.selected_metrics = metrics
+
+def interactive_chart():
+    return rx.vstack(
+        # Controls
+        rx.hstack(
+            rx.button(
+                f"Switch to {'Line' if InteractiveChartState.chart_type == 'bar' else 'Bar'} Chart",
+                on_click=InteractiveChartState.toggle_chart_type,
+                variant="outline"
+            ),
+            rx.checkbox_group(
+                rx.checkbox("Sales", value="sales"),
+                rx.checkbox("Profit", value="profit"), 
+                rx.checkbox("Expenses", value="expenses"),
+                value=InteractiveChartState.selected_metrics,
+                on_change=InteractiveChartState.update_metrics
+            ),
+            spacing="4",
+            align="center"
+        ),
+        
+        # Chart
+        ag_chart(
+            id="interactive_chart",
+            options=InteractiveChartState.chart_options,
+            width="100%",
+            height="400px"
+        ),
+        
+        spacing="4",
+        width="100%"
+    )
+```
+
+### Real-Time Data Chart
+
+```python
+class RealTimeChartState(rx.State):
+    data_points: list[dict] = []
+    max_points: int = 50
+    is_running: bool = False
+    
+    def start_real_time(self):
+        """Start real-time data generation."""
+        self.is_running = True
+        return self.generate_data_point()
+    
+    def stop_real_time(self):
+        """Stop real-time updates."""
+        self.is_running = False
+    
+    def generate_data_point(self):
+        """Generate new data point and update chart."""
+        import random
+        import datetime
+        
+        if not self.is_running:
+            return
+            
+        # Add new data point
+        new_point = {
+            "timestamp": datetime.datetime.now().strftime("%H:%M:%S"),
+            "value": random.randint(10, 100),
+            "trend": random.uniform(-10, 10)
+        }
+        
+        self.data_points.append(new_point)
+        
+        # Keep only last N points for performance
+        if len(self.data_points) > self.max_points:
+            self.data_points = self.data_points[-self.max_points:]
+        
+        # Schedule next update
+        return self.generate_data_point.after(1000)  # Update every 1 second
+    
+    @rx.var(cache=True)
+    def chart_options(self) -> dict:
+        return {
+            "data": self.data_points,
+            "series": [
+                {
+                    "type": "line",
+                    "xKey": "timestamp", 
+                    "yKey": "value",
+                    "name": "Value",
+                    "stroke": "#3b82f6",
+                    "strokeWidth": 2,
+                    "marker": {"enabled": False}
+                }
+            ],
+            "axes": [
+                {
+                    "type": "category",
+                    "position": "bottom",
+                    "label": {"rotation": -45}
+                },
+                {
+                    "type": "number",
+                    "position": "left"
+                }
+            ],
+            "animation": {"enabled": False}  # Disable for real-time
+        }
+```
+
+### Responsive Dashboard Chart
+
+```python
+def dashboard_chart_card(
+    title: str,
+    chart_id: str, 
+    chart_options: dict,
+    height: str = "300px"
+):
+    """Reusable chart card component."""
+    return rx.card(
+        rx.vstack(
+            rx.hstack(
+                rx.heading(title, size="4", weight="medium"),
+                rx.spacer(),
+                rx.menu.root(
+                    rx.menu.trigger(
+                        rx.icon_button(
+                            rx.icon("more_horizontal", size=16),
+                            variant="ghost",
+                            size="2"
+                        )
+                    ),
+                    rx.menu.content(
+                        rx.menu.item("Export PNG"),
+                        rx.menu.item("Export CSV"),
+                        rx.menu.separator(),
+                        rx.menu.item("Refresh Data")
+                    )
+                ),
+                width="100%",
+                align="center"
+            ),
+            
+            ag_chart(
+                id=chart_id,
+                options=chart_options,
+                width="100%",
+                height=height
+            ),
+            
+            spacing="3",
+            align="start"
+        ),
+        width="100%"
+    )
+
+def dashboard():
+    return rx.grid(
+        dashboard_chart_card(
+            "Sales Trends",
+            "sales_chart",
+            State.sales_chart_options
+        ),
+        dashboard_chart_card(
+            "Revenue Distribution", 
+            "revenue_chart",
+            State.revenue_chart_options
+        ),
+        dashboard_chart_card(
+            "Performance Metrics",
+            "performance_chart", 
+            State.performance_chart_options
+        ),
+        columns="3",
+        spacing="4",
+        width="100%"
+    )
+```
+
+## Data Integration Patterns
+
+### Pandas DataFrame Integration
+
+```python
+import pandas as pd
+
+class DataFrameChartState(rx.State):
+    df: pd.DataFrame = pd.DataFrame()
+    
+    def load_csv_data(self, file_path: str):
+        """Load data from CSV file."""
+        self.df = pd.read_csv(file_path)
+    
+    @rx.var(cache=True)
+    def chart_data(self) -> list[dict]:
+        """Convert DataFrame to chart-compatible format."""
+        if self.df.empty:
+            return []
+        return self.df.to_dict(orient="records")
+    
+    @rx.var(cache=True) 
+    def aggregated_chart_options(self) -> dict:
+        """Create chart from aggregated DataFrame data."""
+        if self.df.empty:
+            return {"data": [], "series": []}
+            
+        # Aggregate data
+        monthly_sales = self.df.groupby('month')['sales'].sum().reset_index()
+        
+        return {
+            "data": monthly_sales.to_dict(orient="records"),
+            "series": [
+                {
+                    "type": "bar",
+                    "xKey": "month",
+                    "yKey": "sales",
+                    "fill": "#3b82f6"
+                }
+            ]
+        }
+```
+
+### API Data Integration
+
+```python
+class APIChartState(rx.State):
+    chart_data: list[dict] = []
+    is_loading: bool = False
+    error_message: str = ""
+    
+    async def fetch_data_from_api(self):
+        """Fetch data from external API."""
+        self.is_loading = True
+        self.error_message = ""
+        
+        try:
+            # Example: fetch from API
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                async with session.get("https://api.example.com/data") as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        self.chart_data = data.get("charts", [])
+                    else:
+                        self.error_message = f"API Error: {response.status}"
+        except Exception as e:
+            self.error_message = f"Error: {str(e)}"
+        finally:
+            self.is_loading = False
+    
+    @rx.var(cache=True)
+    def api_chart_options(self) -> dict:
+        if not self.chart_data:
+            return {"data": [], "series": []}
+            
+        return {
+            "data": self.chart_data,
+            "series": [
+                {
+                    "type": "line",
+                    "xKey": "date",
+                    "yKey": "value",
+                    "stroke": "#10b981",
+                    "strokeWidth": 2
+                }
+            ]
+        }
+```
+
+## Performance Optimization
+
+### Large Dataset Handling
+
+```python
+class LargeDataChartState(rx.State):
+    full_data: list[dict] = []  # Complete dataset
+    visible_data: list[dict] = []  # Currently displayed data
+    page_size: int = 1000
+    current_page: int = 0
+    
+    @rx.var(cache=True)
+    def paginated_chart_options(self) -> dict:
+        """Only show subset of data for performance."""
+        start_idx = self.current_page * self.page_size
+        end_idx = start_idx + self.page_size
+        
+        return {
+            "data": self.full_data[start_idx:end_idx],
+            "series": [
+                {
+                    "type": "line",
+                    "xKey": "x",
+                    "yKey": "y",
+                    "marker": {"enabled": False}  # Disable markers for performance
+                }
+            ],
+            "animation": {"enabled": False}  # Disable animations
+        }
+    
+    def next_page(self):
+        """Show next page of data."""
+        if (self.current_page + 1) * self.page_size < len(self.full_data):
+            self.current_page += 1
+    
+    def prev_page(self):
+        """Show previous page of data."""
+        if self.current_page > 0:
+            self.current_page -= 1
+```
+
+### Debounced Updates
+
+```python
+class DebouncedChartState(rx.State):
+    search_term: str = ""
+    _debounce_timer: str = ""
+    
+    def set_search_term(self, term: str):
+        """Set search term with debouncing."""
+        self.search_term = term
+        # Cancel previous timer
+        if self._debounce_timer:
+            self.cancel_timer(self._debounce_timer)
+        # Set new timer
+        self._debounce_timer = self.update_chart_data.after(500)  # 500ms delay
+    
+    def update_chart_data(self):
+        """Update chart data after debounce delay."""
+        # Filter data based on search term
+        filtered_data = [
+            item for item in self.full_data 
+            if self.search_term.lower() in item.get("name", "").lower()
+        ]
+        self.chart_data = filtered_data
+        self._debounce_timer = ""
+```
+
+## Best Practices
+
+### 1. Data Format & Structure
+
+- ✅ **DO** use `list[dict]` format for data
+- ✅ **DO** ensure consistent key names across all data objects
+- ✅ **DO** use meaningful field names (snake_case preferred)
+- ✅ **DO** validate data before passing to chart
+- ❌ **DON'T** pass pandas DataFrame directly
+- ❌ **DON'T** use inconsistent data structures
+
+### 2. Performance Guidelines
+
+- ✅ **DO** use `@rx.var(cache=True)` for computed chart options
+- ✅ **DO** limit data points for real-time charts (max 100-500)
+- ✅ **DO** disable animations for frequently updating charts
+- ✅ **DO** implement pagination for large datasets (>1000 points)
+- ✅ **DO** disable markers on line charts with many points
+- ❌ **DON'T** update entire dataset when only few points change
+- ❌ **DON'T** enable complex animations on real-time charts
+
+### 3. Chart Configuration
+
+- ✅ **DO** specify explicit axes configuration
+- ✅ **DO** provide meaningful titles and labels
+- ✅ **DO** use consistent color schemes across charts
+- ✅ **DO** enable legends for multi-series charts
+- ✅ **DO** configure appropriate number formatting
+- ❌ **DON'T** rely on default axes for complex charts
+- ❌ **DON'T** use too many colors that are hard to distinguish
+
+### 4. Responsive Design
+
+- ✅ **DO** use percentage-based widths ("100%")
+- ✅ **DO** set appropriate height (px or vh units)
+- ✅ **DO** test charts on different screen sizes
+- ✅ **DO** use responsive legend positioning
+- ❌ **DON'T** use fixed pixel widths for responsive layouts
+- ❌ **DON'T** ignore mobile/tablet viewing experience
+
+### 5. User Experience
+
+- ✅ **DO** provide loading states during data fetch
+- ✅ **DO** handle empty data gracefully
+- ✅ **DO** show error messages for failed data loads
+- ✅ **DO** implement tooltips for better data exploration
+- ✅ **DO** add export functionality where appropriate
+- ❌ **DON'T** show broken charts without data
+- ❌ **DON'T** ignore error handling
+
+### 6. State Management
+
+- ✅ **DO** use separate state classes for complex charts
+- ✅ **DO** implement proper event handlers for interactions
+- ✅ **DO** validate state changes before applying
+- ✅ **DO** use computed variables for derived data
+- ❌ **DON'T** mutate chart options directly
+- ❌ **DON'T** forget to handle loading and error states
+
+## Common Patterns
+
+### Chart Type Switcher
+
+```python
+def chart_type_selector(current_type: str, on_change_handler):
+    return rx.select.root(
+        rx.select.trigger(
+            rx.select.value(placeholder="Chart Type"),
+            width="150px"
+        ),
+        rx.select.content(
+            rx.select.item("Bar Chart", value="bar"),
+            rx.select.item("Line Chart", value="line"),
+            rx.select.item("Area Chart", value="area"),
+            rx.select.item("Scatter Plot", value="scatter"),
+            rx.select.item("Pie Chart", value="pie")
+        ),
+        value=current_type,
+        on_change=on_change_handler
+    )
+```
+
+### Data Export Functionality
+
+```python
+class ExportChartState(rx.State):
+    def export_chart_data(self, format: str = "csv"):
+        """Export chart data in specified format.""" 
+        if format == "csv":
+            import csv
+            import io
+            
+            output = io.StringIO()
+            if self.chart_data:
+                writer = csv.DictWriter(output, fieldnames=self.chart_data[0].keys())
+                writer.writeheader()
+                writer.writerows(self.chart_data)
+                return output.getvalue()
+        return ""
+    
+    def download_chart_image(self):
+        """Trigger chart image download (requires AG Charts API)."""
+        # This would require additional JavaScript integration
+        pass
+```
+
+### Error Handling Pattern
+
+```python
+def safe_chart(chart_id: str, chart_options: dict, fallback_message: str = "No data available"):
+    """Chart wrapper with error handling."""
+    return rx.cond(
+        chart_options.get("data") is not None and len(chart_options.get("data", [])) > 0,
+        ag_chart(
+            id=chart_id,
+            options=chart_options,
+            width="100%",
+            height="400px"
+        ),
+        rx.center(
+            rx.vstack(
+                rx.icon("bar_chart_3", size=48, color="gray"),
+                rx.text(fallback_message, color="gray"),
+                spacing="2"
+            ),
+            height="400px"
+        )
+    )
+```
+
+## Complete Example
+
+```python
+import reflex as rx
+import reflex_enterprise as rxe
+from reflex_enterprise import ag_chart
+import random
+from datetime import datetime, timedelta
+
+class SalesChartState(rx.State):
+    # Data
+    sales_data: list[dict] = []
+    chart_type: str = "bar"
+    time_period: str = "monthly"
+    is_loading: bool = False
+    
+    def on_mount(self):
+        """Initialize chart data on component mount."""
+        self.generate_sample_data()
+    
+    def generate_sample_data(self):
+        """Generate sample sales data."""
+        self.is_loading = True
+        
+        # Generate sample data
+        months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+        self.sales_data = [
+            {
+                "month": month,
+                "sales": random.randint(2000, 8000),
+                "profit": random.randint(500, 2000),
+                "expenses": random.randint(1000, 3000)
+            }
+            for month in months
+        ]
+        
+        self.is_loading = False
+    
+    @rx.var(cache=True)
+    def chart_options(self) -> dict:
+        """Generate chart configuration based on current settings."""
+        if not self.sales_data:
+            return {"data": [], "series": []}
+        
+        base_config = {
+            "data": self.sales_data,
+            "axes": [
+                {
+                    "type": "category",
+                    "position": "bottom",
+                    "title": {"text": "Month"}
+                },
+                {
+                    "type": "number",
+                    "position": "left",
+                    "title": {"text": "Amount ($)"},
+                    "label": {"format": ",.0f"}
+                }
+            ],
+            "legend": {"enabled": True, "position": "top"},
+            "tooltip": {"enabled": True}
+        }
+        
+        if self.chart_type == "bar":
+            base_config["series"] = [
+                {
+                    "type": "bar",
+                    "xKey": "month",
+                    "yKey": "sales",
+                    "name": "Sales",
+                    "fill": "#3b82f6"
+                },
+                {
+                    "type": "bar", 
+                    "xKey": "month",
+                    "yKey": "profit",
+                    "name": "Profit",
+                    "fill": "#10b981"
+                }
+            ]
+        elif self.chart_type == "line":
+            base_config["series"] = [
+                {
+                    "type": "line",
+                    "xKey": "month",
+                    "yKey": "sales", 
+                    "name": "Sales",
+                    "stroke": "#3b82f6",
+                    "strokeWidth": 3,
+                    "marker": {"enabled": True, "size": 6}
+                },
+                {
+                    "type": "line",
+                    "xKey": "month", 
+                    "yKey": "profit",
+                    "name": "Profit", 
+                    "stroke": "#10b981",
+                    "strokeWidth": 3,
+                    "marker": {"enabled": True, "size": 6}
+                }
+            ]
+        elif self.chart_type == "area":
+            base_config["series"] = [
+                {
+                    "type": "area",
+                    "xKey": "month",
+                    "yKey": "sales",
+                    "name": "Sales",
+                    "fill": "#3b82f6",
+                    "fillOpacity": 0.7,
+                    "stroke": "#1e40af"
+                }
+            ]
+        
+        return base_config
+    
+    def set_chart_type(self, chart_type: str):
+        """Update chart type."""
+        self.chart_type = chart_type
+    
+    def refresh_data(self):
+        """Refresh chart data."""
+        self.generate_sample_data()
+
+def sales_dashboard():
+    return rx.vstack(
+        # Header
+        rx.hstack(
+            rx.heading("Sales Dashboard", size="8"),
+            rx.spacer(),
+            rx.button(
+                "Refresh Data",
+                on_click=SalesChartState.refresh_data,
+                variant="outline",
+                loading=SalesChartState.is_loading
+            ),
+            width="100%",
+            align="center"
+        ),
+        
+        # Controls
+        rx.hstack(
+            rx.text("Chart Type:", weight="medium"),
+            rx.select.root(
+                rx.select.trigger(
+                    rx.select.value(placeholder="Select chart type"),
+                    width="150px"
+                ),
+                rx.select.content(
+                    rx.select.item("Bar Chart", value="bar"),
+                    rx.select.item("Line Chart", value="line"),
+                    rx.select.item("Area Chart", value="area")
+                ),
+                value=SalesChartState.chart_type,
+                on_change=SalesChartState.set_chart_type
+            ),
+            spacing="3",
+            align="center"
+        ),
+        
+        # Chart
+        rx.card(
+            rx.cond(
+                SalesChartState.is_loading,
+                rx.center(
+                    rx.spinner(size="3"),
+                    height="500px"
+                ),
+                ag_chart(
+                    id="sales_chart",
+                    options=SalesChartState.chart_options,
+                    width="100%",
+                    height="500px"
+                )
+            ),
+            width="100%"
+        ),
+        
+        spacing="6",
+        width="100%",
+        padding="4"
+    )
+
+def index():
+    return sales_dashboard()
+
+app = rxe.App()
+app.add_page(index)
+```
+
+## Resources
+
+- [AG Chart Enterprise Docs](https://reflex.dev/docs/enterprise/ag-chart)
+- [AG Chart JavaScript Docs](https://www.ag-grid.com/charts/) (Reference for chart types and options)
+- [Reflex Enterprise AG Chart](https://enterprise.reflex.dev/ag-chart/)
+- [AG Chart GitHub](https://github.com/ag-grid/ag-charts)
+- [Reflex Discord](https://discord.gg/reflex-dev) for support
+
+## Version Notes
+
+- AG Chart integration is available in Reflex Enterprise
+- Some advanced AG Chart features may require additional configuration
+- Chart export functionality may need custom JavaScript integration
+- Performance optimization is critical for real-time and large dataset scenarios

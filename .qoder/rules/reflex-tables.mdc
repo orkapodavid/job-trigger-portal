@@ -1,0 +1,745 @@
+---
+description: Expert guide for Reflex Table and Data Grid components including Table, Data Table, and Data Editor for displaying and manipulating tabular data
+globs:
+  - "**/*.py"
+---
+
+# Reflex Tables and Data Grids Expert
+
+You are an expert in Reflex's table and data grid components, specializing in creating efficient, interactive tabular data displays with sorting, filtering, pagination, and editing capabilities.
+
+## Table Component (`rx.table`)
+
+**Purpose**: Semantic table for presenting tabular data with full control
+
+**Structure**:
+- `rx.table.root`: Container
+- `rx.table.header`: Table header section
+- `rx.table.body`: Table body section
+- `rx.table.row`: Table row
+- `rx.table.column_header_cell`: Header cell
+- `rx.table.row_header_cell`: Row header cell
+- `rx.table.cell`: Data cell
+
+**Key Properties**:
+- `size`: "1" | "2" | "3" (controls padding and text size)
+- `variant`: "surface" | "ghost"
+- `align`: "left" | "center" | "right"
+
+### Basic Static Table
+
+```python
+rx.table.root(
+    rx.table.header(
+        rx.table.row(
+            rx.table.column_header_cell("Full Name"),
+            rx.table.column_header_cell("Email"),
+            rx.table.column_header_cell("Group")
+        )
+    ),
+    rx.table.body(
+        rx.table.row(
+            rx.table.cell("Danilo Sousa"),
+            rx.table.cell("danilo@example.com"),
+            rx.table.cell("Developer")
+        ),
+        rx.table.row(
+            rx.table.cell("Zahra Ambessa"),
+            rx.table.cell("zahra@example.com"),
+            rx.table.cell("Admin")
+        ),
+        rx.table.row(
+            rx.table.cell("Jasper Eriks"),
+            rx.table.cell("jasper@example.com"),
+            rx.table.cell("Developer")
+        )
+    ),
+    variant="surface",
+    size="3",
+    width="100%"
+)
+```
+
+### Dynamic Table with Foreach
+
+```python
+from dataclasses import dataclass
+
+@dataclass
+class Person:
+    name: str
+    email: str
+    group: str
+
+class TableState(rx.State):
+    people: list[Person] = [
+        Person("Danilo Sousa", "danilo@example.com", "Developer"),
+        Person("Zahra Ambessa", "zahra@example.com", "Admin"),
+        Person("Jasper Eriks", "jasper@example.com", "Developer")
+    ]
+
+def person_row(person: Person):
+    return rx.table.row(
+        rx.table.cell(person.name),
+        rx.table.cell(person.email),
+        rx.table.cell(person.group)
+    )
+
+rx.table.root(
+    rx.table.header(
+        rx.table.row(
+            rx.table.column_header_cell("Full Name"),
+            rx.table.column_header_cell("Email"),
+            rx.table.column_header_cell("Group")
+        )
+    ),
+    rx.table.body(
+        rx.foreach(TableState.people, person_row)
+    ),
+    width="100%"
+)
+```
+
+### Table with Actions
+
+```python
+class ActionTableState(rx.State):
+    users: list[dict] = []
+    
+    def edit_user(self, user_id: str):
+        # Edit logic
+        pass
+    
+    def delete_user(self, user_id: str):
+        self.users = [u for u in self.users if u["id"] != user_id]
+
+def user_row(user: dict):
+    return rx.table.row(
+        rx.table.cell(user["name"]),
+        rx.table.cell(user["email"]),
+        rx.table.cell(
+            rx.hstack(
+                rx.icon_button(
+                    rx.icon("edit"),
+                    variant="ghost",
+                    on_click=lambda: ActionTableState.edit_user(user["id"])
+                ),
+                rx.icon_button(
+                    rx.icon("trash"),
+                    variant="ghost",
+                    color_scheme="red",
+                    on_click=lambda: ActionTableState.delete_user(user["id"])
+                ),
+                spacing="2"
+            )
+        )
+    )
+
+rx.table.root(
+    rx.table.header(
+        rx.table.row(
+            rx.table.column_header_cell("Name"),
+            rx.table.column_header_cell("Email"),
+            rx.table.column_header_cell("Actions")
+        )
+    ),
+    rx.table.body(
+        rx.foreach(ActionTableState.users, user_row)
+    ),
+    width="100%"
+)
+```
+
+### Sorting and Filtering
+
+```python
+class SortFilterState(rx.State):
+    _people: list[dict] = [
+        {"name": "Danilo Sousa", "email": "danilo@example.com", "group": "Developer"},
+        {"name": "Zahra Ambessa", "email": "zahra@example.com", "group": "Admin"},
+        {"name": "Jasper Eriksson", "email": "jasper@example.com", "group": "Developer"}
+    ]
+    sort_value: str = "name"
+    search_value: str = ""
+    
+    @rx.var(cache=True)
+    def current_people(self) -> list[dict]:
+        # Filter
+        people = self._people
+        if self.search_value:
+            people = [
+                p for p in people
+                if self.search_value.lower() in p["name"].lower()
+                or self.search_value.lower() in p["email"].lower()
+            ]
+        
+        # Sort
+        return sorted(people, key=lambda x: x[self.sort_value])
+
+rx.vstack(
+    rx.hstack(
+        rx.input(
+            placeholder="Search...",
+            value=SortFilterState.search_value,
+            on_change=SortFilterState.set_search_value
+        ),
+        rx.select.root(
+            rx.select.trigger(placeholder="Sort by"),
+            rx.select.content(
+                rx.select.item("Name", value="name"),
+                rx.select.item("Email", value="email"),
+                rx.select.item("Group", value="group")
+            ),
+            value=SortFilterState.sort_value,
+            on_change=SortFilterState.set_sort_value
+        ),
+        spacing="3",
+        width="100%"
+    ),
+    rx.table.root(
+        rx.table.header(
+            rx.table.row(
+                rx.table.column_header_cell("Name"),
+                rx.table.column_header_cell("Email"),
+                rx.table.column_header_cell("Group")
+            )
+        ),
+        rx.table.body(
+            rx.foreach(
+                SortFilterState.current_people,
+                lambda person: rx.table.row(
+                    rx.table.cell(person["name"]),
+                    rx.table.cell(person["email"]),
+                    rx.table.cell(person["group"])
+                )
+            )
+        ),
+        width="100%"
+    ),
+    spacing="4",
+    width="100%"
+)
+```
+
+### Database-Backed Table
+
+```python
+class Customer(rx.Model, table=True):
+    """Customer database model."""
+    name: str
+    email: str
+    phone: str
+    address: str
+
+class DBTableState(rx.State):
+    customers: list[Customer] = []
+    
+    def load_entries(self):
+        """Load customers from database."""
+        with rx.session() as session:
+            self.customers = session.exec(
+                Customer.select()
+            ).all()
+
+rx.table.root(
+    rx.table.header(
+        rx.table.row(
+            rx.table.column_header_cell("Name"),
+            rx.table.column_header_cell("Email"),
+            rx.table.column_header_cell("Phone"),
+            rx.table.column_header_cell("Address")
+        )
+    ),
+    rx.table.body(
+        rx.foreach(
+            DBTableState.customers,
+            lambda customer: rx.table.row(
+                rx.table.cell(customer.name),
+                rx.table.cell(customer.email),
+                rx.table.cell(customer.phone),
+                rx.table.cell(customer.address)
+            )
+        )
+    ),
+    on_mount=DBTableState.load_entries,
+    width="100%"
+)
+```
+
+### Database Filtering and Sorting
+
+```python
+class FilteredDBState(rx.State):
+    customers: list[Customer] = []
+    sort_value: str = "name"
+    search_value: str = ""
+    
+    def load_entries(self):
+        """Load and filter customers from database."""
+        with rx.session() as session:
+            query = Customer.select()
+            
+            # Filter
+            if self.search_value:
+                search_pattern = f"%{self.search_value}%"
+                from sqlmodel import or_
+                query = query.where(
+                    or_(
+                        Customer.name.ilike(search_pattern),
+                        Customer.email.ilike(search_pattern),
+                        Customer.phone.ilike(search_pattern)
+                    )
+                )
+            
+            # Sort
+            sort_column = getattr(Customer, self.sort_value)
+            from sqlmodel import asc
+            query = query.order_by(asc(sort_column))
+            
+            self.customers = session.exec(query).all()
+    
+    def filter_values(self, value: str):
+        self.search_value = value
+        self.load_entries()
+    
+    def sort_values(self, value: str):
+        self.sort_value = value
+        self.load_entries()
+
+rx.vstack(
+    rx.hstack(
+        rx.input(
+            placeholder="Search...",
+            on_change=FilteredDBState.filter_values
+        ),
+        rx.select.root(
+            rx.select.trigger(placeholder="Sort by"),
+            rx.select.content(
+                rx.select.item("Name", value="name"),
+                rx.select.item("Email", value="email"),
+                rx.select.item("Phone", value="phone")
+            ),
+            value=FilteredDBState.sort_value,
+            on_change=FilteredDBState.sort_values
+        ),
+        spacing="3"
+    ),
+    rx.table.root(
+        rx.table.header(
+            rx.table.row(
+                rx.table.column_header_cell("Name"),
+                rx.table.column_header_cell("Email"),
+                rx.table.column_header_cell("Phone"),
+                rx.table.column_header_cell("Address")
+            )
+        ),
+        rx.table.body(
+            rx.foreach(
+                FilteredDBState.customers,
+                lambda customer: rx.table.row(
+                    rx.table.cell(customer.name),
+                    rx.table.cell(customer.email),
+                    rx.table.cell(customer.phone),
+                    rx.table.cell(customer.address)
+                )
+            )
+        ),
+        width="100%"
+    ),
+    spacing="4",
+    width="100%"
+)
+```
+
+### Pagination
+
+```python
+class PaginatedTableState(rx.State):
+    customers: list[Customer] = []
+    total_customers: int = 0
+    offset: int = 0
+    limit: int = 10
+    
+    @rx.var
+    def current_page(self) -> int:
+        return (self.offset // self.limit) + 1
+    
+    @rx.var
+    def total_pages(self) -> int:
+        return max(1, (self.total_customers + self.limit - 1) // self.limit)
+    
+    def load_entries(self):
+        """Load paginated customers."""
+        with rx.session() as session:
+            # Get total count
+            self.total_customers = session.exec(
+                Customer.select()
+            ).count()
+            
+            # Get paginated results
+            query = Customer.select().offset(self.offset).limit(self.limit)
+            self.customers = session.exec(query).all()
+    
+    def next_page(self):
+        if self.current_page < self.total_pages:
+            self.offset += self.limit
+            self.load_entries()
+    
+    def prev_page(self):
+        if self.current_page > 1:
+            self.offset -= self.limit
+            self.load_entries()
+
+rx.vstack(
+    rx.table.root(
+        rx.table.header(
+            rx.table.row(
+                rx.table.column_header_cell("Name"),
+                rx.table.column_header_cell("Email"),
+                rx.table.column_header_cell("Phone"),
+                rx.table.column_header_cell("Address")
+            )
+        ),
+        rx.table.body(
+            rx.foreach(
+                PaginatedTableState.customers,
+                lambda customer: rx.table.row(
+                    rx.table.cell(customer.name),
+                    rx.table.cell(customer.email),
+                    rx.table.cell(customer.phone),
+                    rx.table.cell(customer.address)
+                )
+            )
+        ),
+        width="100%"
+    ),
+    rx.hstack(
+        rx.button(
+            "Prev",
+            on_click=PaginatedTableState.prev_page,
+            disabled=PaginatedTableState.current_page == 1
+        ),
+        rx.text(
+            f"Page {PaginatedTableState.current_page} / {PaginatedTableState.total_pages}"
+        ),
+        rx.button(
+            "Next",
+            on_click=PaginatedTableState.next_page,
+            disabled=PaginatedTableState.current_page == PaginatedTableState.total_pages
+        ),
+        spacing="3",
+        justify="center"
+    ),
+    spacing="4",
+    width="100%"
+)
+```
+
+### Table with Download
+
+```python
+class DownloadTableState(rx.State):
+    users: list[dict] = []
+    
+    def download_csv_data(self) -> rx.event.EventSpec:
+        """Download table data as CSV."""
+        csv_content = self._convert_to_csv(self.users)
+        return rx.download(
+            data=csv_content,
+            filename="users.csv"
+        )
+    
+    def _convert_to_csv(self, data: list[dict]) -> str:
+        """Convert data to CSV format."""
+        if not data:
+            return ""
+        
+        # Headers
+        headers = ",".join(data[0].keys())
+        
+        # Rows
+        rows = []
+        for item in data:
+            row = ",".join(str(v) for v in item.values())
+            rows.append(row)
+        
+        return headers + "\n" + "\n".join(rows)
+
+rx.vstack(
+    rx.hstack(
+        rx.button(
+            rx.icon("download"),
+            "Download JSON",
+            on_click=rx.download(
+                data=DownloadTableState.users,
+                filename="users.json"
+            )
+        ),
+        rx.button(
+            rx.icon("download"),
+            "Download CSV",
+            on_click=DownloadTableState.download_csv_data
+        ),
+        spacing="2"
+    ),
+    rx.table.root(
+        rx.table.header(
+            rx.table.row(
+                rx.table.column_header_cell("Name"),
+                rx.table.column_header_cell("Email"),
+                rx.table.column_header_cell("Phone")
+            )
+        ),
+        rx.table.body(
+            rx.foreach(
+                DownloadTableState.users,
+                lambda user: rx.table.row(
+                    rx.table.cell(user["name"]),
+                    rx.table.cell(user["email"]),
+                    rx.table.cell(user["phone"])
+                )
+            )
+        ),
+        width="100%"
+    ),
+    spacing="4",
+    width="100%"
+)
+```
+
+### Selectable Rows
+
+```python
+class SelectableTableState(rx.State):
+    users: list[dict] = []
+    selected_ids: set[str] = set()
+    
+    def toggle_selection(self, user_id: str):
+        if user_id in self.selected_ids:
+            self.selected_ids.discard(user_id)
+        else:
+            self.selected_ids.add(user_id)
+    
+    def select_all(self):
+        self.selected_ids = {u["id"] for u in self.users}
+    
+    def clear_selection(self):
+        self.selected_ids = set()
+    
+    @rx.var
+    def selected_count(self) -> int:
+        return len(self.selected_ids)
+
+def selectable_row(user: dict):
+    return rx.table.row(
+        rx.table.cell(
+            rx.checkbox(
+                checked=user["id"] in SelectableTableState.selected_ids,
+                on_change=lambda: SelectableTableState.toggle_selection(user["id"])
+            )
+        ),
+        rx.table.cell(user["name"]),
+        rx.table.cell(user["email"]),
+        background=rx.cond(
+            user["id"] in SelectableTableState.selected_ids,
+            rx.color("accent", 2),
+            "transparent"
+        )
+    )
+
+rx.vstack(
+    rx.hstack(
+        rx.text(f"{SelectableTableState.selected_count} selected"),
+        rx.button("Select All", on_click=SelectableTableState.select_all),
+        rx.button("Clear", on_click=SelectableTableState.clear_selection),
+        spacing="2"
+    ),
+    rx.table.root(
+        rx.table.header(
+            rx.table.row(
+                rx.table.column_header_cell(""),
+                rx.table.column_header_cell("Name"),
+                rx.table.column_header_cell("Email")
+            )
+        ),
+        rx.table.body(
+            rx.foreach(SelectableTableState.users, selectable_row)
+        ),
+        width="100%"
+    ),
+    spacing="4",
+    width="100%"
+)
+```
+
+## Data Table Component (`rx.data_table`)
+
+**Purpose**: Feature-rich table with built-in search, sorting, and pagination
+
+**Key Properties**:
+- `data`: pandas DataFrame or list of dicts
+- `columns`: List of column definitions
+- `search`: Enable search functionality
+- `sort`: Enable sorting
+- `pagination`: Enable pagination
+- `page_size`: Rows per page
+
+**Best Practices**:
+
+```python
+import pandas as pd
+
+class DataTableState(rx.State):
+    data: pd.DataFrame = pd.DataFrame({
+        "name": ["Alice", "Bob", "Charlie"],
+        "age": [25, 30, 35],
+        "city": ["New York", "London", "Paris"]
+    })
+
+rx.data_table(
+    data=DataTableState.data,
+    pagination=True,
+    search=True,
+    sort=True,
+    page_size=10
+)
+```
+
+## Data Editor Component (`rx.data_editor`)
+
+**Purpose**: Spreadsheet-like editable data grid
+
+**Best Practices**:
+
+```python
+class DataEditorState(rx.State):
+    data: list[list] = [
+        ["Alice", 25, "New York"],
+        ["Bob", 30, "London"],
+        ["Charlie", 35, "Paris"]
+    ]
+    columns: list[dict] = [
+        {"title": "Name", "type": "text"},
+        {"title": "Age", "type": "number"},
+        {"title": "City", "type": "text"}
+    ]
+    
+    def update_cell(self, pos, value):
+        row, col = pos
+        self.data[row][col] = value
+
+rx.data_editor(
+    columns=DataEditorState.columns,
+    data=DataEditorState.data,
+    on_cell_edited=DataEditorState.update_cell
+)
+```
+
+## Common Patterns
+
+### Complete CRUD Table
+
+```python
+class CRUDTableState(rx.State):
+    users: list[dict] = []
+    dialog_open: bool = False
+    edit_user_id: str | None = None
+    
+    def add_user(self, form_data: dict):
+        form_data["id"] = str(len(self.users) + 1)
+        self.users.append(form_data)
+        self.dialog_open = False
+    
+    def edit_user(self, user_id: str):
+        self.edit_user_id = user_id
+        self.dialog_open = True
+    
+    def delete_user(self, user_id: str):
+        self.users = [u for u in self.users if u["id"] != user_id]
+
+def crud_table():
+    return rx.vstack(
+        rx.hstack(
+            rx.heading("Users"),
+            rx.spacer(),
+            rx.dialog.root(
+                rx.dialog.trigger(
+                    rx.button(rx.icon("plus"), "Add User")
+                ),
+                rx.dialog.content(
+                    rx.form(
+                        rx.vstack(
+                            rx.input(placeholder="Name", name="name"),
+                            rx.input(placeholder="Email", name="email", type="email"),
+                            rx.button("Submit", type="submit"),
+                            spacing="3"
+                        ),
+                        on_submit=CRUDTableState.add_user
+                    )
+                ),
+                open=CRUDTableState.dialog_open,
+                on_open_change=CRUDTableState.set_dialog_open
+            ),
+            width="100%",
+            align="center"
+        ),
+        rx.table.root(
+            rx.table.header(
+                rx.table.row(
+                    rx.table.column_header_cell("Name"),
+                    rx.table.column_header_cell("Email"),
+                    rx.table.column_header_cell("Actions")
+                )
+            ),
+            rx.table.body(
+                rx.foreach(
+                    CRUDTableState.users,
+                    lambda user: rx.table.row(
+                        rx.table.cell(user["name"]),
+                        rx.table.cell(user["email"]),
+                        rx.table.cell(
+                            rx.hstack(
+                                rx.icon_button(
+                                    rx.icon("edit"),
+                                    on_click=lambda: CRUDTableState.edit_user(user["id"])
+                                ),
+                                rx.icon_button(
+                                    rx.icon("trash"),
+                                    color_scheme="red",
+                                    on_click=lambda: CRUDTableState.delete_user(user["id"])
+                                ),
+                                spacing="2"
+                            )
+                        )
+                    )
+                )
+            ),
+            width="100%"
+        ),
+        spacing="4",
+        width="100%"
+    )
+```
+
+## Best Practices
+
+1. **Set table width**: Always set `width="100%"` for responsive tables
+2. **Use foreach for dynamic data**: More efficient than manual row generation
+3. **Backend-only large datasets**: Use `_data` prefix for large lists
+4. **Implement pagination**: For tables with >50 rows
+5. **Add search and filters**: Improve UX for finding data
+6. **Database queries**: Use proper indexing and limit result sets
+7. **Cached vars**: Use `@rx.var(cache=True)` for filtered/sorted data
+8. **Loading states**: Show spinners while loading data
+9. **Empty states**: Handle empty data gracefully
+10. **Mobile responsive**: Consider card layout for mobile views
+
+## Performance Tips
+
+- Use database-level filtering and sorting when possible
+- Implement virtual scrolling for very large datasets
+- Limit initial data load (use pagination)
+- Use cached computed vars for transformations
+- Avoid inline lambda functions in foreach when possible
+- Index database columns used in WHERE and ORDER BY clauses
+- Use backend-only vars for data not needed in frontend

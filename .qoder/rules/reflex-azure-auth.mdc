@@ -1,0 +1,469 @@
+---
+description: Generic guide for implementing Azure AD authentication in Reflex applications using OAuth 2.0
+globs: ["**/*.py"]
+---
+
+# Reflex Azure Authentication Guide
+
+You are an expert in implementing Azure Active Directory (Microsoft Identity Platform) authentication in Reflex applications using OAuth 2.0 Authorization Code flow with PKCE.
+
+## Overview
+
+This guide covers implementing OAuth 2.0 authentication for Reflex applications using the Microsoft identity platform (Azure Active Directory). It supports both standard redirect flows and iframe-embedded applications with popup-based authentication.
+
+### Key Features
+- OAuth 2.0 Authorization Code flow with PKCE
+- JWT verification with OIDC discovery and JWKS
+- Iframe support with popup-based authentication
+- Multi-tenant application support
+- Security features: nonce validation, at_hash verification, CSRF protection
+
+## Installation
+
+```bash
+# Install the Azure authentication package
+pip install reflex-azure-auth
+```
+
+## Environment Configuration
+
+Configure these environment variables for Azure AD authentication:
+
+### Required Variables
+
+**AZURE_CLIENT_ID**
+- Application (client) ID from Azure App Registration
+- Example: `00000000-0000-0000-0000-000000000000`
+
+**AZURE_CLIENT_SECRET** 
+- Client secret value from Azure App Registration
+- Security: Keep this value secure, never commit to version control
+
+**AZURE_ISSUER_URI**
+- Azure tenant issuer or authority URL
+- Single tenant: `https://login.microsoftonline.com/<tenant-id>/v2.0`
+- Multi-tenant: `https://login.microsoftonline.com/common/v2.0`
+- Consumers only: `https://login.microsoftonline.com/consumers/v2.0`
+
+### Optional Variables
+
+**AZURE_VALID_TENANT_IDS**
+- Comma-separated list of allowed tenant IDs for multi-tenant apps
+
+**AZURE_AUTHORIZATION_CODE_ENDPOINT**
+- Custom authorization callback path (default: `/authorization-code/callback`)
+
+**AZURE_POPUP_LOGIN_ENDPOINT**
+- Custom popup login endpoint path (default: `/reflex-azure-auth/popup-login`)
+
+**AZURE_POPUP_LOGOUT_ENDPOINT**
+- Custom popup logout endpoint path (default: `/reflex-azure-auth/popup-logout`)
+
+### Example .env File
+
+``env
+AZURE_CLIENT_ID=00000000-0000-0000-0000-000000000000
+AZURE_CLIENT_SECRET=your-secret-value
+AZURE_ISSUER_URI=https://login.microsoftonline.com/common/v2.0
+```
+
+## Azure App Registration Setup
+
+### Step 1: Create Azure App Registration
+1. Navigate to Azure Portal → Azure Active Directory → App registrations
+2. Click "New registration"
+3. Enter application name
+4. Select account types (single or multi-tenant)
+5. Add redirect URI: `http://localhost:3000/authorization-code/callback` (development)
+
+### Step 2: Configure Application
+1. Copy "Application (client) ID" → use as `AZURE_CLIENT_ID`
+2. Go to "Certificates & secrets" → create new client secret
+3. Copy secret value → use as `AZURE_CLIENT_SECRET`
+4. Go to "API permissions" → add OpenID Connect scopes: `openid`, `profile`, `email`
+
+### Important Notes
+- Redirect URIs must match exactly
+- Use tenant-specific issuer URL for production
+- Required scopes: `openid`, `profile`, `email`
+
+## Core Components
+
+### AzureAuthState
+
+Main state class that manages OAuth 2.0 authentication flow:
+
+```python
+import reflex as rx
+from reflex_azure_auth import AzureAuthState
+
+
+class MyAppState(AzureAuthState):
+    # Your app-specific state variables
+    pass
+
+```
+
+#### Key Properties
+- `access_token`: OAuth access token (stored in cookie)
+- `id_token`: OIDC ID token with user claims (stored in cookie)
+- `userinfo`: User profile information (cached, auto-refreshed)
+- `is_authenticated`: Boolean indicating if user has valid tokens
+- `error_message`: Authentication error messages
+
+#### Key Methods
+- `redirect_to_login()`: Redirect to Azure login
+- `redirect_to_logout()`: Logout and clear tokens
+- `_validate_tokens()`: Validate token integrity and expiration
+
+### User Information Structure
+
+```
+from typing import TypedDict
+
+
+class AzureUserInfo(TypedDict):
+    sub: str                    # Subject identifier (unique user ID)
+    email: str | None          # User's email address
+    name: str | None           # Full name
+    given_name: str | None     # First name
+    family_name: str | None    # Last name
+    picture: str | None        # Profile picture URL
+    locale: str | None         # User's locale
+
+```
+
+
+## Implementation Patterns
+
+### Basic Setup
+
+```
+import reflex as rx
+from reflex_enterprise import App
+from reflex_azure_auth import (
+    AzureAuthState,
+    azure_login_button,
+    register_auth_endpoints,
+)
+
+# Create Reflex Enterprise app
+app = App()
+
+# Register authentication endpoints
+register_auth_endpoints(app)
+
+# Add your pages
+app.add_page(index, title="My App")
+
+```
+
+
+### Protected Page Pattern
+
+```
+import reflex as rx
+from reflex_azure_auth import AzureAuthState, azure_login_button
+
+
+def protected_page():
+    return rx.container(
+        rx.vstack(
+            rx.heading("Protected Content"),
+            # Wait for state hydration
+            rx.cond(
+                rx.State.is_hydrated,
+                # Check authentication
+                rx.cond(
+                    AzureAuthState.userinfo,
+                    # Authenticated view
+                    rx.vstack(
+                        rx.text(f"Welcome, {AzureAuthState.userinfo.get('name', 'User')}!"),
+                        rx.button("Logout", on_click=AzureAuthState.redirect_to_logout),
+                        # Your protected content here
+                    ),
+                    # Login required
+                    azure_login_button(
+                        rx.button("Login with Microsoft"),
+                    ),
+                ),
+                # Loading state
+                rx.spinner(),
+            ),
+        ),
+    )
+
+```
+
+
+### Token Validation Pattern
+
+```
+class MyAppState(AzureAuthState):
+    async def perform_secure_operation(self):
+        # Validate tokens before proceeding
+        if not await self._validate_tokens():
+            return rx.toast.error("Authentication required")
+        \n        # Access user information
+        user_info = await self.userinfo
+        if user_info:
+            user_id = user_info[\"sub\"]
+            # Perform authenticated operation
+            pass
+
+```
+
+
+### Accessing User Information
+
+```
+# In components
+rx.cond(
+    AzureAuthState.userinfo,
+    rx.vstack(
+        rx.text(f"User ID: {AzureAuthState.userinfo['sub']}"),
+        rx.text(f"Email: {AzureAuthState.userinfo.get('email', 'N/A')}"),
+        rx.text(f"Name: {AzureAuthState.userinfo.get('name', 'N/A')}"),
+    ),
+)
+
+# In event handlers
+class MyState(AzureAuthState):
+    async def get_user_details(self):
+        user_info = await self.userinfo
+        if user_info:
+            user_email = user_info.get("email")
+            user_name = user_info.get("name") or user_info.get("given_name")
+            # Use user details
+
+```
+
+
+### Custom UI Pages
+
+```
+def custom_loading_page():
+    return rx.container(
+        rx.vstack(
+            rx.heading("Authenticating..."),
+            rx.spinner(size="lg"),
+            spacing="4",
+        ),
+    )
+
+
+def custom_popup_login_page():
+    return rx.container(
+        rx.heading("Opening Microsoft login..."),
+    )
+
+# Register with custom UI
+register_auth_endpoints(
+    app,
+    loading_page=custom_loading_page,
+    popup_login_page=custom_popup_login_page,
+)
+
+```
+
+
+## Iframe/Embedded Application Support
+
+For applications running in iframes, the library automatically detects the iframe context and uses popup-based authentication:
+
+```
+# The azure_login_button automatically handles iframe detection
+azure_login_button(
+    rx.button("Login"),  # Your login button
+)
+
+```
+
+
+### How Iframe Support Works
+1. Library detects iframe context on page load
+2. Login clicks open popup window instead of redirect
+3. User completes authentication in popup
+4. Tokens are passed back to parent frame
+5. Popup closes automatically
+
+## Security Best Practices
+
+### Token Storage
+- Tokens are stored in secure HTTP-only cookies
+- Automatic token refresh when possible
+- Tokens are validated on each request
+
+### Validation
+- JWT signature verification using JWKS
+- Token expiration checking
+- Nonce validation for replay attack prevention
+- `at_hash` validation for token binding
+
+### Multi-Tenant Security
+- Configure `AZURE_VALID_TENANT_IDS` to restrict allowed tenants
+- Use tenant-specific issuer URLs in production
+- Validate tenant claims in tokens
+
+## Common Patterns
+
+### Conditional Navigation
+
+```
+def navigation():
+    return rx.hstack(
+        rx.link("Home", href="/"),
+        rx.cond(
+            AzureAuthState.is_authenticated,
+            rx.hstack(
+                rx.link("Dashboard", href="/dashboard"),
+                rx.button("Logout", on_click=AzureAuthState.redirect_to_logout),
+            ),
+            azure_login_button(
+                rx.button("Login"),
+            ),
+        ),
+    )
+
+```
+
+
+### User Profile Display
+
+```
+def user_profile():
+    return rx.cond(
+        AzureAuthState.userinfo,
+        rx.card(
+            rx.vstack(
+                rx.cond(
+                    AzureAuthState.userinfo.get('picture'),
+                    rx.image(
+                        src=AzureAuthState.userinfo['picture'],
+                        width="64px",
+                        height="64px",
+                        border_radius="50%",
+                    ),
+                ),
+                rx.heading(AzureAuthState.userinfo.get('name', 'User')),
+                rx.text(AzureAuthState.userinfo.get('email', '')),
+                spacing="2",
+            ),
+        ),
+    )
+
+```
+
+
+### Role-Based Access Control
+
+```
+class AppState(AzureAuthState):
+    def is_admin(self) -> bool:
+        user_info = self.userinfo
+        if not user_info:
+            return False
+        \n        # Check admin role (customize based on your setup)
+        admin_emails = [\"admin@yourdomain.com\"]
+        return user_info.get("email") in admin_emails
+
+
+def admin_panel():
+    return rx.cond(
+        AppState.is_admin(),
+        rx.vstack(
+            rx.heading("Admin Panel"),
+            # Admin-only content
+        ),
+        rx.text("Access denied"),
+    )
+
+```
+
+
+## Error Handling
+
+```
+def login_with_error_handling():
+    return rx.vstack(
+        rx.cond(
+            AzureAuthState.error_message,
+            rx.callout(
+                AzureAuthState.error_message,
+                icon="triangle-alert",
+                color_scheme="red",
+            ),
+        ),
+        azure_login_button(
+            rx.button("Login with Microsoft"),
+        ),
+    )
+
+```
+
+
+## Testing
+
+### Test Configuration
+
+```
+# test_config.py
+from unittest.mock import Mock
+
+# Mock Azure auth for testing
+mock_user_info = {
+    "sub": "test-user-id",
+    "email": "test@example.com",
+    "name": "Test User",
+}
+
+
+class MockAzureAuthState:
+    userinfo = mock_user_info
+    is_authenticated = True
+    access_token = "mock-token"
+    error_message = ""
+
+```
+
+
+### Integration Tests
+
+```
+# Use AppHarness for integration testing
+from reflex.testing import AppHarness
+
+
+def test_authentication_flow(app_harness: AppHarness):
+    # Test login flow
+    # Test protected routes
+    # Test logout flow
+    pass
+
+```
+
+
+## Troubleshooting
+
+### Common Issues
+
+**Redirect URI Mismatch**
+- Ensure redirect URIs in Azure match exactly
+- Include the full path: `/authorization-code/callback`
+
+**Token Validation Errors**
+- Check system clock synchronization
+- Verify issuer URI format
+- Ensure required scopes are granted
+
+**Iframe Issues**
+- Verify popup-based authentication is working
+- Check browser popup blockers
+- Ensure proper CORS configuration
+
+### Debug Mode
+
+```
+# Enable debug logging
+import logging
+logging.getLogger("reflex_azure_auth").setLevel(logging.DEBUG)

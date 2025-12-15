@@ -1,0 +1,1499 @@
+---
+description: Comprehensive guide for Reflex Forms - components, state management, validation, and best practices for creating interactive form interfaces
+globs:
+  - "**/*.py"
+---
+
+# Reflex Forms Expert Guide
+
+You are an expert in Reflex Forms, specializing in creating interactive, accessible, and user-friendly form interfaces with proper state management, validation, and database integration.
+
+## Form Architecture & Database Integration
+
+### Core Architecture Components
+A complete Reflex form system consists of:
+- **Models**: Database schema using `rx.Model` (SQLModel)
+- **State Classes**: Form data and business logic management
+- **Components**: Reusable UI form elements
+- **Validation**: Client-side and server-side validation
+- **Routes**: Dynamic URL patterns for form handling
+
+### Database Models for Forms
+
+**Field Types Enum**
+```python
+from enum import Enum
+from reflex.utils.serializers import serializer
+
+class FieldType(Enum):
+    text = "text"
+    number = "number"
+    email = "email"
+    password = "password"
+    checkbox = "checkbox"
+    radio = "radio"
+    select = "select"
+    textarea = "textarea"
+
+@serializer
+def serialize_field_type(value: FieldType) -> str:
+    return value.value
+```
+
+**Model Relationships**
+```python
+import sqlmodel
+import reflex as rx
+
+class Option(rx.Model, table=True):
+    label: str = ""
+    value: str = ""
+    field_id: int = sqlmodel.Field(foreign_key="field.id")
+
+class Field(rx.Model, table=True):
+    name: str = ""
+    type_: FieldType = FieldType.text
+    required: bool = False
+    prompt: str = ""
+    form_id: int = sqlmodel.Field(foreign_key="form.id")
+    
+    # Load options eagerly, delete when field is deleted
+    options: list[Option] = sqlmodel.Relationship(
+        sa_relationship_kwargs={"lazy": "selectin", "cascade": "all, delete"},
+    )
+
+class Form(rx.Model, table=True):
+    name: str = ""
+    owner_id: int = sqlmodel.Field(foreign_key="user.id")
+    
+    fields: list[Field] = sqlmodel.Relationship(
+        sa_relationship_kwargs={"lazy": "selectin", "cascade": "all, delete"},
+    )
+```
+
+**Key Database Patterns**
+- Use `lazy="selectin"` for eager loading of relationships
+- Use `cascade="all, delete"` to maintain referential integrity
+- Add custom serializers for Enum types
+- Use foreign keys for proper relationships
+
+### Form State Management
+
+**Base Form State**
+```python
+import reflex as rx
+from typing import Any
+
+class FormState(rx.State):
+    # Form data
+    form_data: dict[str, Any] = {}
+    
+    # Validation states
+    errors: dict[str, str] = {}
+    is_submitting: bool = False
+    is_valid: bool = True
+    
+    def validate_field(self, field_name: str, value: Any) -> str:
+        """Override this method for custom validation"""
+        return ""
+    
+    def validate_form(self) -> bool:
+        """Validate entire form"""
+        self.errors = {}
+        for field_name, value in self.form_data.items():
+            error = self.validate_field(field_name, value)
+            if error:
+                self.errors[field_name] = error
+        
+        self.is_valid = len(self.errors) == 0
+        return self.is_valid
+    
+    async def handle_submit(self, form_data: dict[str, Any]):
+        """Handle form submission"""
+        self.form_data = form_data
+        self.is_submitting = True
+        
+        if self.validate_form():
+            # Process valid form
+            await self.process_form(form_data)
+        else:
+            # Show validation errors
+            return rx.toast("Please fix validation errors")
+        
+        self.is_submitting = False
+    
+    async def process_form(self, form_data: dict[str, Any]):
+        """Override this method to process form data"""
+        pass
+```
+
+**Dynamic Field Rendering**
+```python
+def render_field_by_type(field_type: FieldType, field_name: str, **props):
+    """Render form field based on type"""
+    return rx.match(
+        field_type,
+        (FieldType.text.value, rx.input(name=field_name, **props)),
+        (FieldType.email.value, rx.input(name=field_name, type="email", **props)),
+        (FieldType.password.value, rx.input(name=field_name, type="password", **props)),
+        (FieldType.number.value, rx.input(name=field_name, type="number", **props)),
+        (FieldType.textarea.value, rx.text_area(name=field_name, **props)),
+        (FieldType.checkbox.value, rx.checkbox(name=field_name, **props)),
+        # Default fallback
+        rx.input(name=field_name, **props)
+    )
+```
+
+## Core Form Components
+
+### Dynamic Routes for Forms
+
+**Route Patterns**
+```python
+# Route constants
+FORM_CREATE = "/form/create"
+FORM_EDIT = "/form/[form_id]/edit"
+FORM_VIEW = "/form/[form_id]"
+FIELD_EDIT = "/form/[form_id]/field/[field_id]"
+
+# Helper functions
+def form_edit_url(form_id: int | str) -> str:
+    return f"/form/{form_id}/edit"
+
+def field_edit_url(form_id: int | str, field_id: int | str) -> str:
+    return f"/form/{form_id}/field/{field_id}"
+```
+
+**Route Registration**
+```python
+# Register dynamic route vars before using them
+rx.State.setup_dynamic_args(rx.app.get_route_args("/_dummy/[form_id]/[field_id]"))
+
+app.add_page(
+    form_edit_page,
+    route="/form/[form_id]/edit",
+    on_load=FormState.load_form,
+)
+```
+
+**Access Route Parameters**
+```python
+class FormState(rx.State):
+    form_id: str = ""
+    
+    def load_form(self):
+        # form_id comes from route parameter
+        if self.form_id:
+            self.load_form_by_id(int(self.form_id))
+```
+
+### Form Components
+
+#### Button Component (`rx.button`)
+
+**Purpose**: Trigger actions or events in the application
+
+**Key Properties**:
+- `on_click`: Event handler triggered when clicked
+- `loading`: bool - Shows spinner and disables interaction
+- `disabled`: bool - Disables button without spinner
+- `size`: "1" | "2" | "3" | "4"
+- `variant`: "classic" | "solid" | "soft" | "surface" | "outline" | "ghost"
+- `color_scheme`: Theme colors
+- `type`: "submit" | "reset" | "button" (default: "button")
+
+**Best Practices**:
+```python
+# Basic button with click handler
+rx.button(
+    "Click Me",
+    on_click=State.handle_click
+)
+
+# Loading state
+rx.button(
+    "Save",
+    loading=State.is_saving,
+    on_click=State.save_data
+)
+
+# Counter example
+rx.hstack(
+    rx.button(
+        "Decrement",
+        on_click=State.decrement
+    ),
+    rx.text(State.count),
+    rx.button(
+        "Increment",
+        on_click=State.increment
+    )
+)
+
+# Submit button in form
+rx.button(
+    "Submit",
+    type="submit",
+    variant="solid",
+    color_scheme="blue"
+)
+
+# Icon button
+rx.button(
+    rx.icon("plus"),
+    "Add Item",
+    on_click=State.add_item
+)
+```
+
+### Form Component (`rx.form`)
+
+**Purpose**: Container for form inputs with submission handling
+
+**Key Properties**:
+- `on_submit`: Event handler receiving form data
+- `reset_on_submit`: bool - Clear form after submission
+
+**Structure**:
+```python
+rx.form(
+    # Form inputs here
+    rx.button("Submit", type="submit"),
+    on_submit=State.handle_submit,
+    reset_on_submit=True
+)
+```
+
+**Best Practices**:
+```python
+# Complete form example
+class FormState(rx.State):
+    form_data: dict = {}
+    
+    def handle_submit(self, form_data: dict):
+        self.form_data = form_data
+        # Process form data
+        
+rx.form(
+    rx.vstack(
+        rx.input(
+            placeholder="Name",
+            name="name",
+            required=True
+        ),
+        rx.input(
+            placeholder="Email",
+            name="email",
+            type="email",
+            required=True
+        ),
+        rx.text_area(
+            placeholder="Message",
+            name="message"
+        ),
+        rx.button("Submit", type="submit"),
+        spacing="3",
+        width="100%"
+    ),
+    on_submit=FormState.handle_submit,
+    reset_on_submit=True
+)
+```
+
+### Input Component (`rx.input`)
+
+**Purpose**: Single-line text input field
+
+**Key Properties**:
+- `value`: Controlled value from state
+- `on_change`: Event handler for value changes
+- `on_blur`: Event handler when input loses focus
+- `placeholder`: Placeholder text
+- `type`: "text" | "email" | "password" | "number" | "tel" | "url"
+- `name`: Form field name for submission
+- `required`: bool - HTML5 validation
+- `disabled`: bool
+- `size`: "1" | "2" | "3"
+- `variant`: "classic" | "surface" | "soft"
+
+**Best Practices**:
+```python
+# Controlled input
+rx.input(
+    value=State.username,
+    on_change=State.set_username,
+    placeholder="Enter username"
+)
+
+# With validation
+rx.vstack(
+    rx.input(
+        value=State.email,
+        on_change=State.set_email,
+        on_blur=State.validate_email,
+        placeholder="Email",
+        type="email",
+        required=True
+    ),
+    rx.cond(
+        State.email_error,
+        rx.text(State.email_error, color_scheme="red", size="1")
+    ),
+    align="start",
+    width="100%"
+)
+
+# Number input with constraints
+rx.input(
+    type="number",
+    placeholder="Age",
+    name="age",
+    min="0",
+    max="120"
+)
+
+# Password input
+rx.input(
+    type="password",
+    placeholder="Password",
+    name="password",
+    required=True
+)
+```
+
+### Checkbox Component (`rx.checkbox`)
+
+**Purpose**: Toggle binary options
+
+**Key Properties**:
+- `checked`: Controlled checked state
+- `on_change`: Event handler for state changes
+- `name`: Form field name
+- `value`: Value when checked
+- `disabled`: bool
+- `required`: bool
+- `size`: "1" | "2" | "3"
+- `variant`: "classic" | "soft" | "surface"
+
+**Best Practices**:
+```python
+# Simple checkbox
+rx.checkbox(
+    "I agree to terms",
+    checked=State.agreed,
+    on_change=State.set_agreed
+)
+
+# Checkbox group
+rx.vstack(
+    rx.text("Select options:", weight="bold"),
+    rx.checkbox(
+        "Option 1",
+        checked=State.option1,
+        on_change=State.set_option1
+    ),
+    rx.checkbox(
+        "Option 2",
+        checked=State.option2,
+        on_change=State.set_option2
+    ),
+    rx.checkbox(
+        "Option 3",
+        checked=State.option3,
+        on_change=State.set_option3
+    ),
+    align="start",
+    spacing="2"
+)
+
+# With label composition
+rx.text(
+    rx.checkbox(
+        checked=State.subscribe,
+        on_change=State.set_subscribe
+    ),
+    "Subscribe to newsletter",
+    size="2"
+)
+```
+
+### Radio Group Component (`rx.radio`)
+
+**Purpose**: Select one option from multiple choices
+
+**Structure**:
+- `rx.radio.root`: Container
+- `rx.radio.item`: Individual radio option
+
+**Key Properties**:
+- `value`: Selected value
+- `on_change`: Event handler for selection changes
+- `name`: Form field name
+- `direction`: "row" | "column"
+
+**Best Practices**:
+```python
+# Radio group
+rx.radio.root(
+    rx.radio.item("Option 1", value="1"),
+    rx.radio.item("Option 2", value="2"),
+    rx.radio.item("Option 3", value="3"),
+    value=State.selected_option,
+    on_change=State.set_selected_option,
+    direction="column"
+)
+
+# Horizontal radio group
+rx.radio.root(
+    rx.radio.item("Small", value="sm"),
+    rx.radio.item("Medium", value="md"),
+    rx.radio.item("Large", value="lg"),
+    value=State.size,
+    on_change=State.set_size,
+    direction="row",
+    spacing="3"
+)
+```
+
+### Select Component (`rx.select`)
+
+**Purpose**: Dropdown selection from multiple options
+
+**Structure**:
+- `rx.select.root`: Container
+- `rx.select.trigger`: Clickable trigger
+- `rx.select.content`: Dropdown content
+- `rx.select.item`: Individual option
+
+**Key Properties**:
+- `value`: Selected value
+- `on_change`: Event handler for selection changes
+- `placeholder`: Placeholder text
+- `size`: "1" | "2" | "3"
+
+**Best Practices**:
+```python
+# Simple select
+rx.select.root(
+    rx.select.trigger(placeholder="Select option"),
+    rx.select.content(
+        rx.select.item("Option 1", value="1"),
+        rx.select.item("Option 2", value="2"),
+        rx.select.item("Option 3", value="3"),
+    ),
+    value=State.selection,
+    on_change=State.set_selection
+)
+
+# With state-driven options
+rx.select.root(
+    rx.select.trigger(placeholder="Select country"),
+    rx.select.content(
+        rx.foreach(
+            State.countries,
+            lambda country: rx.select.item(
+                country.name,
+                value=country.code
+            )
+        )
+    ),
+    value=State.selected_country,
+    on_change=State.set_selected_country
+)
+
+# In forms
+rx.select.root(
+    rx.select.trigger(placeholder="Sort by"),
+    rx.select.content(
+        rx.select.item("Name", value="name"),
+        rx.select.item("Date", value="date"),
+        rx.select.item("Price", value="price"),
+    ),
+    name="sort_field",
+    on_change=State.handle_sort
+)
+```
+
+### Slider Component (`rx.slider`)
+
+**Purpose**: Select numeric value from a range
+
+**Key Properties**:
+- `value`: Current value (list for range slider)
+- `on_change`: Event handler for value changes
+- `on_value_commit`: Event handler when user releases slider
+- `min`: Minimum value (default: 0)
+- `max`: Maximum value (default: 100)
+- `step`: Increment step
+- `size`: "1" | "2" | "3"
+- `variant`: "classic" | "surface" | "soft"
+
+**Best Practices**:
+```python
+# Simple slider
+rx.vstack(
+    rx.text(f"Value: {State.slider_value}"),
+    rx.slider(
+        value=State.slider_value,
+        on_change=State.set_slider_value,
+        min=0,
+        max=100
+    ),
+    width="100%"
+)
+
+# Range slider
+rx.slider(
+    value=[State.min_price, State.max_price],
+    on_value_commit=State.update_price_range,
+    min=0,
+    max=1000,
+    step=10
+)
+
+# With steps and labels
+rx.vstack(
+    rx.text(f"Volume: {State.volume}%"),
+    rx.slider(
+        value=State.volume,
+        on_change=State.set_volume,
+        min=0,
+        max=100,
+        step=5
+    ),
+    width="100%"
+)
+```
+
+### Switch Component (`rx.switch`)
+
+**Purpose**: Toggle between on/off states
+
+**Key Properties**:
+- `checked`: Controlled checked state
+- `on_change`: Event handler for state changes
+- `name`: Form field name
+- `disabled`: bool
+- `required`: bool
+- `size`: "1" | "2" | "3"
+- `variant`: "classic" | "surface" | "soft"
+
+**Best Practices**:
+```python
+# Simple switch
+rx.switch(
+    checked=State.is_enabled,
+    on_change=State.set_is_enabled
+)
+
+# With label
+rx.hstack(
+    rx.switch(
+        checked=State.notifications_enabled,
+        on_change=State.set_notifications_enabled
+    ),
+    rx.text("Enable notifications"),
+    spacing="2"
+)
+
+# Settings panel
+rx.vstack(
+    rx.hstack(
+        rx.switch(
+            checked=State.dark_mode,
+            on_change=State.toggle_dark_mode
+        ),
+        rx.text("Dark mode"),
+        justify="between",
+        width="100%"
+    ),
+    rx.hstack(
+        rx.switch(
+            checked=State.auto_save,
+            on_change=State.toggle_auto_save
+        ),
+        rx.text("Auto save"),
+        justify="between",
+        width="100%"
+    ),
+    spacing="3",
+    width="100%"
+)
+```
+
+### Text Area Component (`rx.text_area`)
+
+**Purpose**: Multi-line text input
+
+**Key Properties**:
+- `value`: Controlled value from state
+- `on_change`: Event handler for value changes
+- `on_blur`: Event handler when input loses focus
+- `placeholder`: Placeholder text
+- `name`: Form field name
+- `required`: bool
+- `disabled`: bool
+- `resize`: "none" | "vertical" | "horizontal" | "both"
+- `size`: "1" | "2" | "3"
+
+**Best Practices**:
+```python
+# Basic text area
+rx.text_area(
+    value=State.description,
+    on_change=State.set_description,
+    placeholder="Enter description",
+    rows="5"
+)
+
+# In forms
+rx.form(
+    rx.vstack(
+        rx.text_area(
+            placeholder="Your message",
+            name="message",
+            required=True,
+            resize="vertical"
+        ),
+        rx.text(
+            f"{State.char_count}/500 characters",
+            size="1",
+            color_scheme="gray"
+        ),
+        rx.button("Submit", type="submit"),
+        spacing="2",
+        width="100%"
+    ),
+    on_submit=State.handle_submit
+)
+
+# Auto-resize
+rx.text_area(
+    value=State.notes,
+    on_change=State.set_notes,
+    placeholder="Notes",
+    resize="none",
+    style={"min_height": "100px"}
+)
+```
+
+### Upload Component (`rx.upload`)
+
+**Purpose**: File upload functionality
+
+**Structure**:
+- `rx.upload`: Container with upload logic
+- `rx.upload.root`: Root element
+- `rx.upload.trigger`: Clickable trigger
+- `rx.upload.dropzone`: Drag-and-drop area
+
+**Key Methods**:
+- `rx.upload_files()`: Event to trigger file upload
+- `rx.clear_selected_files()`: Clear selected files
+
+**Best Practices**:
+```python
+# File upload with state
+class UploadState(rx.State):
+    uploaded_files: list[str] = []
+    
+    async def handle_upload(self, files: list[rx.UploadFile]):
+        for file in files:
+            upload_data = await file.read()
+            # Process file
+            self.uploaded_files.append(file.filename)
+
+rx.upload(
+    rx.vstack(
+        rx.button(
+            "Select Files",
+            on_click=rx.upload_files()
+        ),
+        rx.text(f"Files: {', '.join(UploadState.uploaded_files)}"),
+        spacing="2"
+    ),
+    on_upload=UploadState.handle_upload,
+    multiple=True,
+    accept={
+        "image/png": [".png"],
+        "image/jpeg": [".jpg", ".jpeg"]
+    }
+)
+
+# Drag and drop
+rx.upload(
+    rx.upload.root(
+        rx.upload.dropzone(
+            rx.vstack(
+                rx.icon("upload", size=32),
+                rx.text("Drag files here or click to browse"),
+                spacing="2"
+            ),
+            border="2px dashed",
+            padding="4"
+        ),
+    ),
+    on_upload=State.handle_upload
+)
+```
+
+## Form Patterns
+
+### Complete Registration Form
+```python
+class RegistrationState(rx.State):
+    username: str = ""
+    email: str = ""
+    password: str = ""
+    agreed_to_terms: bool = False
+    newsletter: bool = False
+    
+    def handle_submit(self, form_data: dict):
+        # Validate and process registration
+        pass
+
+def registration_form():
+    return rx.card(
+        rx.form(
+            rx.vstack(
+                rx.heading("Create Account", size="6"),
+                rx.input(
+                    placeholder="Username",
+                    name="username",
+                    required=True
+                ),
+                rx.input(
+                    placeholder="Email",
+                    name="email",
+                    type="email",
+                    required=True
+                ),
+                rx.input(
+                    placeholder="Password",
+                    name="password",
+                    type="password",
+                    required=True
+                ),
+                rx.checkbox(
+                    "I agree to the terms and conditions",
+                    name="terms",
+                    required=True
+                ),
+                rx.checkbox(
+                    "Subscribe to newsletter",
+                    name="newsletter"
+                ),
+                rx.button(
+                    "Register",
+                    type="submit",
+                    width="100%"
+                ),
+                spacing="3",
+                width="100%"
+            ),
+            on_submit=RegistrationState.handle_submit,
+            width="100%"
+        ),
+        max_width="400px"
+    )
+```
+
+### Settings Form
+```python
+rx.form(
+    rx.vstack(
+        rx.heading("Settings", size="5"),
+        rx.separator(),
+        rx.vstack(
+            rx.text("Notifications", weight="bold"),
+            rx.hstack(
+                rx.switch(
+                    checked=State.email_notifications,
+                    on_change=State.set_email_notifications
+                ),
+                rx.text("Email notifications"),
+                justify="between",
+                width="100%"
+            ),
+            rx.hstack(
+                rx.switch(
+                    checked=State.push_notifications,
+                    on_change=State.set_push_notifications
+                ),
+                rx.text("Push notifications"),
+                justify="between",
+                width="100%"
+            ),
+            spacing="2",
+            width="100%"
+        ),
+        rx.separator(),
+        rx.vstack(
+            rx.text("Preferences", weight="bold"),
+            rx.select.root(
+                rx.select.trigger(placeholder="Language"),
+                rx.select.content(
+                    rx.select.item("English", value="en"),
+                    rx.select.item("Spanish", value="es"),
+                    rx.select.item("French", value="fr"),
+                ),
+                value=State.language,
+                on_change=State.set_language
+            ),
+            spacing="2",
+            width="100%"
+        ),
+        rx.button("Save Changes", type="submit", width="100%"),
+        spacing="4",
+        width="100%"
+    ),
+    on_submit=State.save_settings
+)
+```
+
+### Search and Filter Form
+```python
+rx.hstack(
+    rx.input(
+        placeholder="Search...",
+        value=State.search_query,
+        on_change=State.set_search_query,
+        flex="1"
+    ),
+    rx.select.root(
+        rx.select.trigger(placeholder="Category"),
+        rx.select.content(
+            rx.select.item("All", value="all"),
+            rx.select.item("Active", value="active"),
+            rx.select.item("Archived", value="archived"),
+        ),
+        value=State.category_filter,
+        on_change=State.set_category_filter
+    ),
+    rx.slider(
+        value=State.price_range,
+        on_value_commit=State.set_price_range,
+        min=0,
+        max=1000
+    ),
+    spacing="3",
+    width="100%"
+)
+```
+
+## Advanced Form Patterns
+
+### Multi-Step Forms
+```python
+class MultiStepFormState(rx.State):
+    current_step: int = 1
+    total_steps: int = 3
+    form_data: dict[str, Any] = {}
+    
+    def next_step(self):
+        if self.current_step < self.total_steps:
+            self.current_step += 1
+    
+    def prev_step(self):
+        if self.current_step > 1:
+            self.current_step -= 1
+    
+    def handle_step_submit(self, step_data: dict[str, Any]):
+        # Merge step data into form data
+        self.form_data.update(step_data)
+        
+        if self.current_step == self.total_steps:
+            # Final submission
+            return self.submit_form()
+        else:
+            # Go to next step
+            self.next_step()
+
+def multi_step_form():
+    return rx.form(
+        rx.vstack(
+            # Progress indicator
+            rx.progress(
+                value=(MultiStepFormState.current_step / MultiStepFormState.total_steps) * 100,
+                width="100%"
+            ),
+            
+            # Step content
+            rx.match(
+                MultiStepFormState.current_step,
+                (1, step_one_form()),
+                (2, step_two_form()),
+                (3, step_three_form()),
+            ),
+            
+            # Navigation buttons
+            rx.hstack(
+                rx.button(
+                    "Previous",
+                    on_click=MultiStepFormState.prev_step,
+                    disabled=MultiStepFormState.current_step == 1
+                ),
+                rx.button(
+                    rx.cond(
+                        MultiStepFormState.current_step == MultiStepFormState.total_steps,
+                        "Submit",
+                        "Next"
+                    ),
+                    type="submit"
+                ),
+                justify="between",
+                width="100%"
+            ),
+            spacing="4",
+            width="100%"
+        ),
+        on_submit=MultiStepFormState.handle_step_submit
+    )
+```
+
+### Conditional Field Rendering
+```python
+class ConditionalFormState(rx.State):
+    field_visibility: dict[str, bool] = {
+        "company_name": False,
+        "tax_id": False
+    }
+    user_type: str = "individual"
+    
+    def set_user_type(self, user_type: str):
+        self.user_type = user_type
+        # Show/hide fields based on user type
+        if user_type == "business":
+            self.field_visibility["company_name"] = True
+            self.field_visibility["tax_id"] = True
+        else:
+            self.field_visibility["company_name"] = False
+            self.field_visibility["tax_id"] = False
+
+def conditional_form():
+    return rx.form(
+        rx.vstack(
+            rx.radio.root(
+                rx.radio.item("Individual", value="individual"),
+                rx.radio.item("Business", value="business"),
+                value=ConditionalFormState.user_type,
+                on_change=ConditionalFormState.set_user_type,
+                direction="row"
+            ),
+            
+            # Always visible fields
+            rx.input(placeholder="Full Name", name="name", required=True),
+            rx.input(placeholder="Email", name="email", type="email", required=True),
+            
+            # Conditional fields
+            rx.cond(
+                ConditionalFormState.field_visibility["company_name"],
+                rx.input(placeholder="Company Name", name="company_name", required=True)
+            ),
+            rx.cond(
+                ConditionalFormState.field_visibility["tax_id"],
+                rx.input(placeholder="Tax ID", name="tax_id", required=True)
+            ),
+            
+            rx.button("Submit", type="submit"),
+            spacing="3",
+            width="100%"
+        ),
+        on_submit=ConditionalFormState.handle_submit
+    )
+```
+
+### Dynamic Field Management
+```python
+class DynamicFormState(rx.State):
+    fields: list[dict] = [
+        {"name": "field_0", "type": "text", "label": "Field 1", "required": False}
+    ]
+    
+    def add_field(self):
+        new_index = len(self.fields)
+        self.fields.append({
+            "name": f"field_{new_index}",
+            "type": "text",
+            "label": f"Field {new_index + 1}",
+            "required": False
+        })
+    
+    def remove_field(self, index: int):
+        if len(self.fields) > 1:  # Keep at least one field
+            self.fields.pop(index)
+    
+    def update_field(self, index: int, key: str, value: Any):
+        if 0 <= index < len(self.fields):
+            self.fields[index][key] = value
+
+def dynamic_field_editor(field: dict, index: int):
+    return rx.card(
+        rx.vstack(
+            rx.hstack(
+                rx.input(
+                    value=field["label"],
+                    on_change=lambda v: DynamicFormState.update_field(index, "label", v),
+                    placeholder="Field Label"
+                ),
+                rx.select.root(
+                    rx.select.trigger(placeholder="Type"),
+                    rx.select.content(
+                        rx.select.item("Text", value="text"),
+                        rx.select.item("Email", value="email"),
+                        rx.select.item("Number", value="number"),
+                        rx.select.item("Textarea", value="textarea"),
+                    ),
+                    value=field["type"],
+                    on_change=lambda v: DynamicFormState.update_field(index, "type", v)
+                ),
+                rx.button(
+                    rx.icon("trash"),
+                    on_click=lambda: DynamicFormState.remove_field(index),
+                    color_scheme="red",
+                    variant="ghost"
+                ),
+                justify="between",
+                width="100%"
+            ),
+            rx.checkbox(
+                "Required",
+                checked=field["required"],
+                on_change=lambda v: DynamicFormState.update_field(index, "required", v)
+            ),
+            align="start",
+            spacing="2"
+        ),
+        padding="3"
+    )
+
+def dynamic_form_builder():
+    return rx.vstack(
+        rx.heading("Form Builder", size="5"),
+        
+        # Field editors
+        rx.foreach(
+            DynamicFormState.fields,
+            lambda field, index: dynamic_field_editor(field, index)
+        ),
+        
+        # Add field button
+        rx.button(
+            rx.icon("plus"),
+            "Add Field",
+            on_click=DynamicFormState.add_field,
+            variant="outline"
+        ),
+        
+        spacing="3",
+        width="100%"
+    )
+```
+
+## Form Validation Patterns
+
+### Client-Side Validation
+```python
+class ValidatedFormState(rx.State):
+    # Field values
+    email: str = ""
+    password: str = ""
+    confirm_password: str = ""
+    
+    # Validation errors
+    email_error: str = ""
+    password_error: str = ""
+    confirm_password_error: str = ""
+    
+    def validate_email(self, email: str = None):
+        email = email or self.email
+        if not email:
+            self.email_error = "Email is required"
+        elif "@" not in email or "." not in email:
+            self.email_error = "Invalid email format"
+        else:
+            self.email_error = ""
+    
+    def validate_password(self, password: str = None):
+        password = password or self.password
+        if not password:
+            self.password_error = "Password is required"
+        elif len(password) < 8:
+            self.password_error = "Password must be at least 8 characters"
+        else:
+            self.password_error = ""
+    
+    def validate_confirm_password(self, confirm_password: str = None):
+        confirm_password = confirm_password or self.confirm_password
+        if confirm_password != self.password:
+            self.confirm_password_error = "Passwords do not match"
+        else:
+            self.confirm_password_error = ""
+    
+    def set_email(self, email: str):
+        self.email = email
+        self.validate_email(email)
+    
+    def set_password(self, password: str):
+        self.password = password
+        self.validate_password(password)
+        if self.confirm_password:
+            self.validate_confirm_password()
+    
+    def set_confirm_password(self, confirm_password: str):
+        self.confirm_password = confirm_password
+        self.validate_confirm_password(confirm_password)
+    
+    def is_form_valid(self) -> bool:
+        return not any([
+            self.email_error,
+            self.password_error,
+            self.confirm_password_error
+        ])
+
+def validated_input_field(label: str, value: str, error: str, **input_props):
+    """Reusable validated input component"""
+    return rx.vstack(
+        rx.text(label, weight="bold", size="2"),
+        rx.input(
+            value=value,
+            **input_props,
+            style={
+                "border_color": rx.cond(error, "red", "gray")
+            }
+        ),
+        rx.cond(
+            error,
+            rx.text(error, color="red", size="1")
+        ),
+        align="start",
+        spacing="1",
+        width="100%"
+    )
+
+def validated_form():
+    return rx.form(
+        rx.vstack(
+            validated_input_field(
+                "Email",
+                ValidatedFormState.email,
+                ValidatedFormState.email_error,
+                on_change=ValidatedFormState.set_email,
+                type="email",
+                placeholder="Enter your email"
+            ),
+            validated_input_field(
+                "Password",
+                ValidatedFormState.password,
+                ValidatedFormState.password_error,
+                on_change=ValidatedFormState.set_password,
+                type="password",
+                placeholder="Enter password"
+            ),
+            validated_input_field(
+                "Confirm Password",
+                ValidatedFormState.confirm_password,
+                ValidatedFormState.confirm_password_error,
+                on_change=ValidatedFormState.set_confirm_password,
+                type="password",
+                placeholder="Confirm password"
+            ),
+            rx.button(
+                "Submit",
+                type="submit",
+                disabled=~ValidatedFormState.is_form_valid(),
+                width="100%"
+            ),
+            spacing="3",
+            width="100%"
+        ),
+        on_submit=ValidatedFormState.handle_submit
+    )
+```
+
+### Server-Side Validation with Database
+```python
+class ServerValidatedFormState(rx.State):
+    form_data: dict[str, Any] = {}
+    errors: dict[str, str] = {}
+    is_submitting: bool = False
+    
+    async def handle_submit(self, form_data: dict[str, Any]):
+        self.form_data = form_data
+        self.errors = {}
+        self.is_submitting = True
+        
+        # Server-side validation
+        await self.validate_form_data(form_data)
+        
+        if not self.errors:
+            # Save to database
+            success = await self.save_form_data(form_data)
+            if success:
+                return rx.redirect("/success")
+            else:
+                self.errors["_form"] = "Failed to save data"
+        
+        self.is_submitting = False
+    
+    async def validate_form_data(self, form_data: dict[str, Any]):
+        # Email validation
+        email = form_data.get("email", "")
+        if not email:
+            self.errors["email"] = "Email is required"
+        elif await self.email_exists(email):
+            self.errors["email"] = "Email already registered"
+        
+        # Username validation
+        username = form_data.get("username", "")
+        if not username:
+            self.errors["username"] = "Username is required"
+        elif len(username) < 3:
+            self.errors["username"] = "Username must be at least 3 characters"
+        elif await self.username_exists(username):
+            self.errors["username"] = "Username already taken"
+    
+    async def email_exists(self, email: str) -> bool:
+        with rx.session() as session:
+            user = session.exec(
+                sqlmodel.select(User).where(User.email == email)
+            ).first()
+            return user is not None
+    
+    async def username_exists(self, username: str) -> bool:
+        with rx.session() as session:
+            user = session.exec(
+                sqlmodel.select(User).where(User.username == username)
+            ).first()
+            return user is not None
+    
+    async def save_form_data(self, form_data: dict[str, Any]) -> bool:
+        try:
+            with rx.session() as session:
+                user = User(**form_data)
+                session.add(user)
+                session.commit()
+                return True
+        except Exception as e:
+            print(f"Error saving user: {e}")
+            return False
+```
+
+### HTML5 Validation with Custom Messages
+```python
+def html5_validated_form():
+    return rx.form(
+        rx.vstack(
+            # Required field with custom validation message
+            rx.form.field(
+                rx.input(
+                    placeholder="Name (required)",
+                    name="name",
+                    required=True,
+                    min_length=2
+                ),
+                rx.form.message(
+                    "Name is required and must be at least 2 characters",
+                    match="valueMissing|tooShort",
+                    color="red"
+                )
+            ),
+            
+            # Email with pattern validation
+            rx.form.field(
+                rx.input(
+                    placeholder="Email",
+                    name="email",
+                    type="email",
+                    required=True
+                ),
+                rx.form.message(
+                    "Please enter a valid email address",
+                    match="typeMismatch|valueMissing",
+                    color="red"
+                )
+            ),
+            
+            # Number with range validation
+            rx.form.field(
+                rx.input(
+                    placeholder="Age (18-100)",
+                    name="age",
+                    type="number",
+                    min="18",
+                    max="100",
+                    required=True
+                ),
+                rx.form.message(
+                    "Age must be between 18 and 100",
+                    match="rangeOverflow|rangeUnderflow|valueMissing",
+                    color="red"
+                )
+            ),
+            
+            rx.button("Submit", type="submit"),
+            spacing="3",
+            width="100%"
+        ),
+        on_submit=ServerValidatedFormState.handle_submit
+    )
+```
+
+## Form Security & Best Practices
+
+### CSRF Protection
+```python
+class SecureFormState(rx.State):
+    csrf_token: str = rx.Cookie("")
+    
+    def generate_csrf_token(self):
+        import secrets
+        self.csrf_token = secrets.token_urlsafe(32)
+    
+    def validate_csrf_token(self, submitted_token: str) -> bool:
+        return submitted_token == self.csrf_token
+    
+    def handle_submit(self, form_data: dict[str, Any]):
+        csrf_token = form_data.pop("csrf_token", "")
+        if not self.validate_csrf_token(csrf_token):
+            return rx.toast("Invalid form submission", variant="error")
+        
+        # Process form...
+        pass
+
+def secure_form():
+    return rx.form(
+        rx.vstack(
+            # Hidden CSRF token
+            rx.input(
+                type="hidden",
+                name="csrf_token",
+                value=SecureFormState.csrf_token
+            ),
+            
+            # Form fields...
+            rx.input(placeholder="Username", name="username"),
+            rx.button("Submit", type="submit"),
+            spacing="3"
+        ),
+        on_submit=SecureFormState.handle_submit,
+        on_mount=SecureFormState.generate_csrf_token
+    )
+```
+
+### Input Sanitization
+```python
+import html
+import re
+
+class SanitizedFormState(rx.State):
+    def sanitize_input(self, value: str) -> str:
+        """Basic input sanitization"""
+        # HTML escape
+        value = html.escape(value)
+        # Remove potentially dangerous characters
+        value = re.sub(r'[<>"\'\/]', '', value)
+        # Trim whitespace
+        value = value.strip()
+        return value
+    
+    def handle_submit(self, form_data: dict[str, Any]):
+        # Sanitize all string inputs
+        sanitized_data = {}
+        for key, value in form_data.items():
+            if isinstance(value, str):
+                sanitized_data[key] = self.sanitize_input(value)
+            else:
+                sanitized_data[key] = value
+        
+        # Process sanitized data...
+        self.process_form(sanitized_data)
+```
+
+### Rate Limiting
+```python
+from datetime import datetime, timedelta
+
+class RateLimitedFormState(rx.State):
+    last_submission: datetime = None
+    submission_count: int = 0
+    rate_limit_window: int = 60  # seconds
+    max_submissions: int = 5
+    
+    def is_rate_limited(self) -> bool:
+        now = datetime.now()
+        
+        # Reset counter if window expired
+        if (self.last_submission and 
+            now - self.last_submission > timedelta(seconds=self.rate_limit_window)):
+            self.submission_count = 0
+        
+        return self.submission_count >= self.max_submissions
+    
+    def handle_submit(self, form_data: dict[str, Any]):
+        if self.is_rate_limited():
+            return rx.toast(
+                f"Too many submissions. Try again in {self.rate_limit_window} seconds.",
+                variant="error"
+            )
+        
+        self.last_submission = datetime.now()
+        self.submission_count += 1
+        
+        # Process form...
+        pass
+```
+
+## Accessibility & UX Best Practices
+
+### Accessibility Guidelines
+- Always use proper `type` attributes for inputs
+- Include `required` for mandatory fields
+- Provide clear labels and placeholders
+- Use `aria-label` when labels are not visible
+- Ensure proper tab order with logical field sequence
+- Show validation errors clearly with appropriate colors
+- Disable submit buttons during processing to prevent double submission
+- Provide loading states for async operations
+- Use semantic HTML elements (`fieldset`, `legend` for grouping)
+- Ensure sufficient color contrast for error messages
+- Support keyboard navigation for all interactive elements
+
+### Performance Optimization
+- Use `on_blur` instead of `on_change` for expensive validations
+- Debounce search inputs to reduce API calls
+- Use controlled components only when necessary for state management
+- Clear large file uploads from state after processing
+- Use `reset_on_submit` to clear forms automatically
+- Implement virtual scrolling for long option lists
+- Cache validation results when possible
+- Use `rx.lazy` for complex form sections
+
+### Form State Management Tips
+- Keep form state minimal and focused
+- Use computed vars for derived values
+- Implement proper error boundaries
+- Handle async operations with loading states
+- Use optimistic updates where appropriate
+- Implement auto-save for long forms
+- Clear sensitive data from state after submission
+
+### Testing Considerations
+- Test all validation scenarios
+- Verify keyboard navigation
+- Test with screen readers
+- Validate form submission with various data types
+- Test error handling and recovery
+- Verify CSRF protection
+- Test rate limiting functionality
+- Validate sanitization of inputs
+
+### Common Anti-Patterns to Avoid
+- Don't store sensitive data in client state longer than necessary
+- Avoid blocking UI during non-critical operations
+- Don't rely solely on client-side validation
+- Avoid complex nested form structures
+- Don't forget to handle network failures
+- Avoid mixing controlled and uncontrolled inputs
+- Don't ignore accessibility requirements
+- Avoid storing large files in component state

@@ -1,0 +1,723 @@
+---
+description: Expert guidance for Reflex CLI, Environment Variables, Plugins, and Utilities
+globs: ["**/*.py", "**/rxconfig.py"]
+---
+
+# You are an expert in Reflex CLI, configuration, and development tools
+
+## Core Principles
+
+- Use Reflex CLI for project management and deployment
+- Configure behavior via environment variables
+- Extend functionality with plugins
+- Optimize performance with utility functions
+
+## Reflex CLI
+
+Command-line interface for creating and managing Reflex apps.
+
+### Common Commands
+
+**Initialize Project**
+```bash
+# Create new Reflex app
+reflex init
+
+# Re-initialize with latest template (if rxconfig.py exists)
+reflex init
+```
+
+**Run Application**
+```bash
+# Development mode (default) - auto-reload on changes
+reflex run
+
+# Production mode - optimized build
+reflex run --env prod
+
+# Frontend only
+reflex run --frontend-only
+
+# Backend only
+reflex run --backend-only
+
+# Custom ports
+reflex run --frontend-port 3001 --backend-port 8001
+
+# With logging
+reflex run --loglevel debug
+```
+
+**Export Application**
+```bash
+# Export frontend and backend to zip files
+reflex export
+
+# Export creates:
+# - frontend.zip: Compiled Next.js app
+# - backend.zip: Python backend
+```
+
+**Deployment**
+```bash
+# Deploy to Reflex Cloud
+reflex cloud deploy
+
+# Login to Reflex Cloud
+reflex cloud login
+
+# List cloud projects
+reflex cloud projects list
+
+# Manage secrets
+reflex cloud secrets create SECRET_NAME value
+reflex cloud secrets list
+reflex cloud secrets delete SECRET_NAME
+```
+
+**Database Management**
+```bash
+# Initialize Alembic migrations
+reflex db init
+
+# Create migration
+reflex db makemigrations -m "description"
+
+# Apply migrations
+reflex db migrate
+
+# Show migration history
+reflex db history
+```
+
+**Rename Project**
+```bash
+# Rename app (updates config files)
+reflex rename new-app-name
+```
+
+**Helper Scripts**
+```bash
+# Access development scripts
+reflex script
+```
+
+## Environment Variables
+
+Configure Reflex behavior through environment variables.
+
+### Critical Environment Variables
+
+**Application Mode**
+```bash
+# Development or production
+export REFLEX_ENV_MODE=dev  # or prod
+```
+
+**Server Ports**
+```bash
+export REFLEX_FRONTEND_PORT=3000
+export REFLEX_BACKEND_PORT=8000
+```
+
+**Execution Mode**
+```bash
+# Run frontend only (exclusive with BACKEND_ONLY)
+export REFLEX_FRONTEND_ONLY=true
+
+# Run backend only (exclusive with FRONTEND_ONLY)
+export REFLEX_BACKEND_ONLY=true
+```
+
+**Build Configuration**
+```bash
+# Use npm instead of bun
+export REFLEX_USE_NPM=true
+
+# Use system-installed bun
+export REFLEX_USE_SYSTEM_BUN=true
+
+# Use Turbopack bundler
+export REFLEX_USE_TURBOPACK=true
+
+# Use Granian server instead of Uvicorn
+export REFLEX_USE_GRANIAN=true
+```
+
+**Hot Reload**
+```bash
+# Additional paths to watch (colon-separated)
+export REFLEX_HOT_RELOAD_INCLUDE_PATHS="/custom:/another"
+
+# Paths to exclude (takes precedence)
+export REFLEX_HOT_RELOAD_EXCLUDE_PATHS="/node_modules:/venv"
+
+# Strict hot reload (picks up environment changes)
+export REFLEX_STRICT_HOT_RELOAD=true
+
+# Force full reload instead of HMR
+export VITE_FORCE_FULL_RELOAD=true
+
+# Disable hot module replacement
+export VITE_HMR=false
+```
+
+**Database**
+```bash
+# Connection pool settings
+export SQLALCHEMY_POOL_SIZE=5
+export SQLALCHEMY_MAX_OVERFLOW=10
+export SQLALCHEMY_POOL_TIMEOUT=30
+export SQLALCHEMY_POOL_RECYCLE=3600
+export SQLALCHEMY_POOL_PRE_PING=true
+
+# SQL query logging
+export SQLALCHEMY_ECHO=true
+```
+
+**Development**
+```bash
+# Check for package updates
+export REFLEX_CHECK_LATEST_VERSION=true
+
+# Enable full debug logging
+export REFLEX_ENABLE_FULL_LOGGING=true
+
+# Custom log file path
+export REFLEX_LOG_FILE=/path/to/custom.log
+
+# Performance mode
+export REFLEX_PERF_MODE=warn  # or error, ignore
+
+# State size limit (KB)
+export REFLEX_STATE_SIZE_LIMIT=1000
+
+# Persist web directory in dev mode
+export REFLEX_PERSIST_WEB_DIR=true
+```
+
+**WebSocket Configuration**
+```bash
+# Ping interval (seconds)
+export REFLEX_SOCKET_INTERVAL=25
+
+# Timeout for pong response (seconds)
+export REFLEX_SOCKET_TIMEOUT=120
+
+# Maximum message size (bytes)
+export REFLEX_SOCKET_MAX_HTTP_BUFFER_SIZE=1000000
+```
+
+**Redis Configuration**
+```bash
+# Ignore Redis config errors
+export REFLEX_IGNORE_REDIS_CONFIG_ERROR=true
+```
+
+**Directories**
+```bash
+# Reflex dependencies directory
+export REFLEX_DIR=/custom/reflex/dir
+
+# Working directory for frontend
+export REFLEX_WEB_WORKDIR=.web
+
+# Working directory for states
+export REFLEX_STATES_WORKDIR=.states
+
+# Uploaded files directory
+export REFLEX_UPLOADED_FILES_DIR=uploaded_files
+```
+
+**Advanced**
+```bash
+# Skip compilation
+export __REFLEX_SKIP_COMPILE=true
+
+# Cold start timeout (seconds)
+export REFLEX_BACKEND_COLD_START_TIMEOUT=10
+
+# Enable SSR
+export REFLEX_SSR=true
+
+# HTTP client bind address (IPv6: "::")
+export REFLEX_HTTP_CLIENT_BIND_ADDRESS=::
+
+# SSL verification
+export SSL_NO_VERIFY=true
+
+# NPM registry
+export NPM_CONFIG_REGISTRY=https://registry.npmjs.org
+```
+
+### Using Environment Variables
+
+**.env File**
+```bash
+# .env
+REFLEX_APP_NAME=myapp
+REFLEX_FRONTEND_PORT=3001
+REFLEX_BACKEND_PORT=8001
+REFLEX_DB_URL=postgresql://user:pass@localhost/mydb
+REFLEX_REDIS_URL=redis://localhost:6379
+REFLEX_LOGLEVEL=DEBUG
+
+# Custom app variables
+DATABASE_URL=postgresql://localhost/mydb
+API_KEY=secret_key_here
+```
+
+**Load in Config**
+```python
+# rxconfig.py
+import reflex as rx
+
+config = rx.Config(
+    app_name="myapp",
+    env_file=".env",  # Load environment variables
+)
+```
+
+**Access in State**
+```python
+import os
+
+class State(rx.State):
+    
+    def get_api_key(self) -> str:
+        """Access environment variable"""
+        return os.getenv("API_KEY", "default_key")
+```
+
+## Plugins
+
+Extend Reflex functionality during compilation.
+
+### Built-in Plugins
+
+**SitemapPlugin**
+```python
+# rxconfig.py
+from reflex.plugins.sitemap import SitemapPlugin
+
+config = rx.Config(
+    app_name="myapp",
+    plugins=[
+        SitemapPlugin(
+            base_url="https://myapp.com",
+        ),
+    ],
+)
+```
+
+**Configure Sitemap**
+```python
+# Add sitemap metadata to pages
+@rx.page(
+    route="/blog/post",
+    sitemap={
+        "loc": "/blog/post",
+        "lastmod": datetime.now(),
+        "changefreq": "weekly",
+        "priority": 0.8,
+    }
+)
+def blog_post():
+    return rx.container(...)
+```
+
+**TailwindV4Plugin**
+```python
+from reflex.plugins.tailwind import TailwindV4Plugin
+
+config = rx.Config(
+    app_name="myapp",
+    plugins=[
+        TailwindV4Plugin(
+            config={
+                "theme": {
+                    "extend": {
+                        "colors": {
+                            "primary": "#3B82F6",
+                        }
+                    }
+                }
+            }
+        ),
+    ],
+)
+```
+
+**TailwindV3Plugin**
+```python
+from reflex.plugins.tailwind import TailwindV3Plugin
+
+config = rx.Config(
+    plugins=[
+        TailwindV3Plugin(
+            config={
+                "content": ["./src/**/*.{js,jsx,ts,tsx}"],
+                "theme": {
+                    "extend": {}
+                },
+                "plugins": [],
+            }
+        ),
+    ],
+)
+```
+
+### Disabling Plugins
+
+```python
+# Disable default plugins
+config = rx.Config(
+    disable_plugins=[
+        "reflex.plugins.sitemap.SitemapPlugin",
+    ],
+)
+```
+
+### Creating Custom Plugins
+
+```python
+from reflex.plugins import Plugin
+
+class CustomPlugin(Plugin):
+    """Custom plugin example"""
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.custom_config = kwargs.get("custom_config", {})
+    
+    def on_pre_compile(self):
+        """Run before compilation"""
+        print("Pre-compile hook")
+    
+    def on_post_compile(self):
+        """Run after compilation"""
+        print("Post-compile hook")
+    
+    def add_frontend_packages(self) -> list[str]:
+        """Add npm packages"""
+        return ["custom-package@^1.0.0"]
+    
+    def add_frontend_code(self) -> str:
+        """Add custom frontend code"""
+        return """
+        // Custom JavaScript code
+        console.log('Custom plugin loaded');
+        """
+
+# Use in config
+config = rx.Config(
+    plugins=[
+        CustomPlugin(custom_config={"key": "value"}),
+    ],
+)
+```
+
+## Utility Functions
+
+### run_in_thread
+
+Execute non-async functions in separate thread.
+
+```python
+import reflex as rx
+import time
+
+class State(rx.State):
+    result: str = ""
+    is_loading: bool = False
+    
+    def slow_operation(self):
+        """CPU-bound operation"""
+        self.is_loading = True
+        
+        # Run in thread to avoid blocking
+        result = rx.run_in_thread(self._process_data)
+        
+        self.result = result
+        self.is_loading = False
+        return rx.toast.success("Processing complete!")
+    
+    def _process_data(self) -> str:
+        """Blocking operation - runs in thread"""
+        # Simulate heavy computation
+        time.sleep(5)
+        return "Processed data"
+    
+    async def quick_task(self):
+        """Quick async task - no thread needed"""
+        import httpx
+        async with httpx.AsyncClient() as client:
+            response = await client.get("https://api.example.com")
+            return response.json()
+
+# Usage
+def page():
+    return rx.vstack(
+        rx.button(
+            "Run Slow Task",
+            on_click=State.slow_operation,
+            is_loading=State.is_loading,
+        ),
+        rx.text(State.result),
+    )
+```
+
+**When to Use run_in_thread**
+- CPU-bound operations (not I/O bound)
+- Synchronous libraries without async equivalents
+- Long-running computations
+- File processing operations
+
+**Example: File Processing**
+```python
+import reflex as rx
+import hashlib
+
+class FileState(rx.State):
+    file_hash: str = ""
+    
+    def process_large_file(self, file_path: str):
+        """Process file in thread"""
+        result = rx.run_in_thread(
+            lambda: self._calculate_hash(file_path)
+        )
+        self.file_hash = result
+        return rx.toast.success("File processed!")
+    
+    def _calculate_hash(self, file_path: str) -> str:
+        """CPU-intensive hash calculation"""
+        sha256 = hashlib.sha256()
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                sha256.update(chunk)
+        return sha256.hexdigest()
+```
+
+**Error Handling**
+```python
+import reflex as rx
+
+class State(rx.State):
+    
+    def safe_thread_operation(self):
+        """Handle thread errors"""
+        try:
+            result = rx.run_in_thread(self._risky_operation)
+            return rx.toast.success(f"Result: {result}")
+        except ValueError as e:
+            return rx.toast.error(f"Thread error: {e}")
+    
+    def _risky_operation(self) -> str:
+        # This will raise ValueError if passed async function
+        # run_in_thread only accepts non-async functions
+        return "Success"
+```
+
+## Best Practices
+
+### Environment Configuration
+
+```python
+# Use environment-specific configs
+import os
+
+# .env.development
+# REFLEX_ENV_MODE=dev
+# REFLEX_LOGLEVEL=DEBUG
+# DATABASE_URL=sqlite:///dev.db
+
+# .env.production
+# REFLEX_ENV_MODE=prod
+# REFLEX_LOGLEVEL=INFO
+# DATABASE_URL=postgresql://prod-server/db
+
+# rxconfig.py
+env = os.getenv("ENVIRONMENT", "development")
+env_file = f".env.{env}"
+
+config = rx.Config(
+    app_name="myapp",
+    env_file=env_file,
+    loglevel=os.getenv("REFLEX_LOGLEVEL", "INFO"),
+)
+```
+
+### Plugin Organization
+
+```python
+# Keep plugin configs organized
+from reflex.plugins import SitemapPlugin, TailwindV4Plugin
+
+SITEMAP_CONFIG = {
+    "base_url": "https://myapp.com",
+}
+
+TAILWIND_CONFIG = {
+    "theme": {
+        "extend": {
+            "colors": {
+                "brand": "#FF6B6B",
+            }
+        }
+    }
+}
+
+config = rx.Config(
+    app_name="myapp",
+    plugins=[
+        SitemapPlugin(**SITEMAP_CONFIG),
+        TailwindV4Plugin(config=TAILWIND_CONFIG),
+    ],
+)
+```
+
+### Development Workflow
+
+```bash
+# Development
+export REFLEX_ENV_MODE=dev
+export REFLEX_LOGLEVEL=DEBUG
+export REFLEX_ENABLE_FULL_LOGGING=true
+reflex run
+
+# Production build test
+export REFLEX_ENV_MODE=prod
+reflex run --env prod
+
+# Export for deployment
+reflex export
+```
+
+### Performance Tuning
+
+```python
+# rxconfig.py
+import os
+
+# Development - fast iteration
+if os.getenv("REFLEX_ENV_MODE") == "dev":
+    config = rx.Config(
+        app_name="myapp",
+        loglevel="DEBUG",
+        telemetry_enabled=False,
+        react_strict_mode=True,
+    )
+# Production - optimized
+else:
+    config = rx.Config(
+        app_name="myapp",
+        loglevel="INFO",
+        telemetry_enabled=True,
+        state_manager_mode=rx.StateManagerMode.REDIS,
+        redis_url=os.getenv("REDIS_URL"),
+        static_page_generation_timeout=120,
+    )
+```
+
+## Common Patterns
+
+### Multi-Environment Setup
+
+```python
+# config/base.py
+BASE_CONFIG = {
+    "app_name": "myapp",
+    "telemetry_enabled": True,
+}
+
+# config/development.py
+DEV_CONFIG = {
+    **BASE_CONFIG,
+    "loglevel": "DEBUG",
+    "frontend_port": 3000,
+    "backend_port": 8000,
+    "db_url": "sqlite:///dev.db",
+}
+
+# config/production.py
+PROD_CONFIG = {
+    **BASE_CONFIG,
+    "loglevel": "INFO",
+    "state_manager_mode": "redis",
+    "db_url": os.getenv("DATABASE_URL"),
+    "redis_url": os.getenv("REDIS_URL"),
+}
+
+# rxconfig.py
+import os
+from config.development import DEV_CONFIG
+from config.production import PROD_CONFIG
+
+env = os.getenv("ENVIRONMENT", "development")
+config_map = {
+    "development": DEV_CONFIG,
+    "production": PROD_CONFIG,
+}
+
+config = rx.Config(**config_map[env])
+```
+
+### CLI Scripts
+
+```bash
+#!/bin/bash
+# scripts/dev.sh
+
+export REFLEX_ENV_MODE=dev
+export REFLEX_LOGLEVEL=DEBUG
+export REFLEX_ENABLE_FULL_LOGGING=true
+
+reflex run --loglevel debug
+
+# Usage: ./scripts/dev.sh
+```
+
+```bash
+#!/bin/bash
+# scripts/prod.sh
+
+export REFLEX_ENV_MODE=prod
+export REFLEX_LOGLEVEL=INFO
+
+reflex run --env prod
+
+# Usage: ./scripts/prod.sh
+```
+
+### Database Migrations
+
+```bash
+# Initialize migrations
+reflex db init
+
+# Create migration
+reflex db makemigrations -m "add user table"
+
+# Apply migrations
+reflex db migrate
+
+# Check status
+reflex db history
+```
+
+### Cloud Deployment
+
+```bash
+# Login to Reflex Cloud
+reflex cloud login
+
+# Create/update secrets
+reflex cloud secrets create DATABASE_URL "postgresql://..."
+reflex cloud secrets create API_KEY "secret_key"
+
+# Deploy
+reflex cloud deploy
+
+# Monitor deployment
+reflex cloud logs
+```

@@ -1,0 +1,599 @@
+---
+description: Expert guidance for Reflex State management - State, StateManager, and Model classes for data persistence
+globs: ["**/*.py"]
+---
+
+# You are an expert in Reflex State management and database models
+
+## Core Principles
+
+- State classes inherit from `rx.State` to manage reactive application state
+- Use `rx.Model` for database-backed data with SQLAlchemy/SQLModel
+- StateManager handles multi-client state persistence (disk, memory, or Redis)
+- State vars automatically trigger UI updates when modified
+
+## State Class (reflex.state.State)
+
+Base state class for reactive application state management.
+
+### Basic State Definition
+
+```python
+import reflex as rx
+
+class AppState(rx.State):
+    """Main application state"""
+    
+    # Basic state vars
+    count: int = 0
+    text: str = ""
+    is_loading: bool = False
+    items: list[str] = []
+    user_data: dict = {}
+    
+    # Event handlers
+    def increment(self):
+        self.count += 1
+    
+    def set_text(self, value: str):
+        self.text = value
+    
+    def toggle_loading(self):
+        self.is_loading = not self.is_loading
+```
+
+### Computed Vars
+
+```python
+class State(rx.State):
+    first_name: str = ""
+    last_name: str = ""
+    items: list[int] = []
+    
+    @rx.var
+    def full_name(self) -> str:
+        """Computed var - automatically updates when dependencies change"""
+        return f"{self.first_name} {self.last_name}".strip()
+    
+    @rx.var
+    def item_count(self) -> int:
+        """Computed var for list length"""
+        return len(self.items)
+    
+    @rx.var(cache=True)
+    def expensive_computation(self) -> str:
+        """Cached computed var - only recalculates when dependencies change"""
+        # Expensive operation here
+        return "result"
+```
+
+### Substates
+
+```python
+class UserState(rx.State):
+    """User-specific state"""
+    username: str = ""
+    email: str = ""
+    is_authenticated: bool = False
+    
+    def login(self, username: str, email: str):
+        self.username = username
+        self.email = email
+        self.is_authenticated = True
+    
+    def logout(self):
+        self.username = ""
+        self.email = ""
+        self.is_authenticated = False
+
+class ProductState(rx.State):
+    """Product management state"""
+    products: list[dict] = []
+    selected_product: dict | None = None
+    
+    def load_products(self):
+        # Load products from database
+        pass
+    
+    def select_product(self, product_id: int):
+        # Find and select product
+        pass
+
+# Access substates
+def page():
+    return rx.vstack(
+        rx.text(UserState.username),
+        rx.text(f"Products: {ProductState.products.length()}"),
+    )
+```
+
+### Special Event Handlers
+
+**set_is_hydrated**: Mark state as hydrated (initialized on client)
+```python
+class State(rx.State):
+    def on_page_load(self):
+        """Called when page loads"""
+        # State is automatically hydrated
+        pass
+```
+
+**setvar**: Dynamically set any state var
+```python
+class State(rx.State):
+    dynamic_field: str = ""
+    
+    def update_field(self, field_name: str, value: str):
+        """Dynamically update any field"""
+        return State.setvar(field_name, value)
+
+# Usage
+rx.button("Update", on_click=lambda: State.update_field("dynamic_field", "new_value"))
+```
+
+### Async Event Handlers
+
+```python
+class State(rx.State):
+    data: list[dict] = []
+    is_loading: bool = False
+    error: str = ""
+    
+    async def fetch_data(self):
+        """Async event handler for API calls"""
+        self.is_loading = True
+        self.error = ""
+        
+        try:
+            # Simulate API call
+            import httpx
+            async with httpx.AsyncClient() as client:
+                response = await client.get("https://api.example.com/data")
+                self.data = response.json()
+        except Exception as e:
+            self.error = str(e)
+        finally:
+            self.is_loading = False
+```
+
+### Background Tasks
+
+```python
+class State(rx.State):
+    progress: int = 0
+    
+    async def long_running_task(self):
+        """Background task with progress updates"""
+        for i in range(100):
+            self.progress = i
+            await asyncio.sleep(0.1)
+            # State updates are sent to client automatically
+        
+        self.progress = 100
+        return rx.toast.success("Task completed!")
+```
+
+## StateManager (reflex.istate.manager.StateManager)
+
+Manages state persistence across multiple clients.
+
+### Creating State Manager
+
+```python
+# Automatic creation based on config
+# rxconfig.py
+config = rx.Config(
+    state_manager_mode=rx.StateManagerMode.REDIS,  # or DISK, MEMORY
+    redis_url="redis://localhost:6379",
+)
+```
+
+### StateManager Methods
+
+```python
+# Get state for a specific client token
+state = await state_manager.get_state(token="client_token_123")
+
+# Set state for a client
+await state_manager.set_state(token="client_token_123", state=state_instance)
+
+# Modify state with exclusive lock
+async with state_manager.modify_state(token="client_token_123") as state:
+    state.counter += 1
+    # Changes are persisted when context exits
+```
+
+### State Manager Modes
+
+**DISK Mode** (Default)
+```python
+# Stores state in .states/ directory
+config = rx.Config(
+    state_manager_mode=rx.StateManagerMode.DISK,
+    states_workdir=".states",  # Custom directory
+)
+```
+
+**REDIS Mode** (Production/Scaling)
+```python
+# Stores state in Redis for horizontal scaling
+config = rx.Config(
+    state_manager_mode=rx.StateManagerMode.REDIS,
+    redis_url="redis://localhost:6379",
+    redis_lock_expiration=10000,  # Lock expiration in ms
+    redis_lock_warning_threshold=1000,  # Warning threshold in ms
+    redis_token_expiration=3600,  # Token expiration in seconds
+)
+```
+
+**MEMORY Mode** (Development/Testing)
+```python
+# Stores state in memory (not persistent across restarts)
+config = rx.Config(
+    state_manager_mode=rx.StateManagerMode.MEMORY,
+)
+```
+
+## Model Class (reflex.model.Model)
+
+Database models using SQLAlchemy/SQLModel.
+
+### Basic Model Definition
+
+```python
+import reflex as rx
+
+class User(rx.Model, table=True):
+    """User database model"""
+    
+    # Primary key automatically included
+    # id: int = None
+    
+    username: str
+    email: str
+    created_at: datetime = datetime.now()
+    is_active: bool = True
+```
+
+### Model with Relationships
+
+```python
+class Author(rx.Model, table=True):
+    name: str
+    email: str
+    
+    # Relationship - one author has many books
+    # books: list["Book"] = Relationship(back_populates="author")
+
+class Book(rx.Model, table=True):
+    title: str
+    isbn: str
+    author_id: int = Field(foreign_key="author.id")
+    published_date: datetime
+    
+    # Relationship - many books belong to one author
+    # author: Author = Relationship(back_populates="books")
+```
+
+### Model Methods
+
+**create_all**: Create all database tables
+```python
+# In initialization
+with rx.session() as session:
+    rx.Model.create_all()
+```
+
+**Database Operations**
+```python
+class State(rx.State):
+    users: list[User] = []
+    
+    def load_users(self):
+        """Load all users from database"""
+        with rx.session() as session:
+            self.users = session.exec(
+                User.select()
+            ).all()
+    
+    def add_user(self, username: str, email: str):
+        """Add new user to database"""
+        with rx.session() as session:
+            user = User(username=username, email=email)
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+        
+        # Reload users
+        self.load_users()
+    
+    def update_user(self, user_id: int, **kwargs):
+        """Update user fields"""
+        with rx.session() as session:
+            user = session.get(User, user_id)
+            if user:
+                for key, value in kwargs.items():
+                    setattr(user, key, value)
+                session.commit()
+        
+        self.load_users()
+    
+    def delete_user(self, user_id: int):
+        """Delete user from database"""
+        with rx.session() as session:
+            user = session.get(User, user_id)
+            if user:
+                session.delete(user)
+                session.commit()
+        
+        self.load_users()
+```
+
+**select**: Query database
+```python
+# Simple select
+with rx.session() as session:
+    users = session.exec(User.select()).all()
+
+# Filtered select
+with rx.session() as session:
+    active_users = session.exec(
+        User.select().where(User.is_active == True)
+    ).all()
+
+# Ordered select
+with rx.session() as session:
+    users = session.exec(
+        User.select().order_by(User.created_at.desc())
+    ).all()
+```
+
+### Alembic Migrations
+
+**Initialize Alembic**
+```python
+# Initialize migrations
+User.alembic_init()
+```
+
+**Generate Migration**
+```python
+# Auto-generate migration from model changes
+User.alembic_autogenerate(
+    connection=engine.connect(),
+    message="Add user table",
+    write_migration_scripts=True,
+)
+```
+
+**Run Migrations**
+```python
+# Apply migrations
+User.migrate(autogenerate=True)
+```
+
+**Get Migration History**
+```python
+# Check migration status
+history = User.get_migration_history()
+```
+
+## Best Practices
+
+### State Organization
+
+```python
+# Separate concerns into different state classes
+
+class AuthState(rx.State):
+    """Authentication state"""
+    user: User | None = None
+    token: str = ""
+    
+    async def login(self, username: str, password: str):
+        # Login logic
+        pass
+    
+    def logout(self):
+        self.user = None
+        self.token = ""
+
+class UIState(rx.State):
+    """UI-specific state"""
+    sidebar_open: bool = True
+    theme: str = "light"
+    notifications: list[str] = []
+    
+    def toggle_sidebar(self):
+        self.sidebar_open = not self.sidebar_open
+
+class DataState(rx.State):
+    """Data management state"""
+    items: list[dict] = []
+    selected_item: dict | None = None
+    
+    async def load_items(self):
+        # Load from API/database
+        pass
+```
+
+### State Auto Setters
+
+```python
+# Enable auto-generated setters in config
+config = rx.Config(
+    state_auto_setters=True,
+)
+
+# Automatically generates set_<field_name> methods
+class State(rx.State):
+    count: int = 0
+    text: str = ""
+    # Automatically get: set_count, set_text
+
+# Usage
+rx.input(value=State.text, on_change=State.set_text)
+```
+
+### Database Configuration
+
+```python
+# rxconfig.py
+
+# SQLite (Development)
+config = rx.Config(
+    db_url="sqlite:///reflex.db",
+)
+
+# PostgreSQL (Production)
+config = rx.Config(
+    db_url="postgresql://user:password@localhost:5432/mydb",
+    async_db_url="postgresql+asyncpg://user:password@localhost:5432/mydb",
+)
+
+# MySQL
+config = rx.Config(
+    db_url="mysql://user:password@localhost:3306/mydb",
+)
+```
+
+### Connection Pool Settings
+
+```python
+# Environment variables for connection pooling
+import os
+
+os.environ["SQLALCHEMY_POOL_SIZE"] = "5"
+os.environ["SQLALCHEMY_MAX_OVERFLOW"] = "10"
+os.environ["SQLALCHEMY_POOL_TIMEOUT"] = "30"
+os.environ["SQLALCHEMY_POOL_RECYCLE"] = "3600"
+os.environ["SQLALCHEMY_POOL_PRE_PING"] = "true"
+os.environ["SQLALCHEMY_ECHO"] = "false"  # Set to true for SQL logging
+```
+
+## Common Patterns
+
+### Form State Management
+
+```python
+class FormState(rx.State):
+    """Manage form data with validation"""
+    
+    # Form fields
+    name: str = ""
+    email: str = ""
+    age: int = 0
+    
+    # Validation
+    errors: dict[str, str] = {}
+    is_valid: bool = False
+    
+    def set_name(self, value: str):
+        self.name = value
+        self.validate()
+    
+    def set_email(self, value: str):
+        self.email = value
+        self.validate()
+    
+    def validate(self):
+        """Validate form fields"""
+        self.errors = {}
+        
+        if not self.name:
+            self.errors["name"] = "Name is required"
+        
+        if not self.email or "@" not in self.email:
+            self.errors["email"] = "Valid email is required"
+        
+        if self.age < 18:
+            self.errors["age"] = "Must be 18 or older"
+        
+        self.is_valid = len(self.errors) == 0
+    
+    async def submit(self):
+        """Submit form if valid"""
+        self.validate()
+        if self.is_valid:
+            # Save to database
+            with rx.session() as session:
+                user = User(name=self.name, email=self.email, age=self.age)
+                session.add(user)
+                session.commit()
+            
+            # Reset form
+            self.name = ""
+            self.email = ""
+            self.age = 0
+            return rx.toast.success("User created!")
+```
+
+### Pagination Pattern
+
+```python
+class PaginatedState(rx.State):
+    """State with pagination support"""
+    
+    all_items: list[dict] = []
+    current_page: int = 1
+    items_per_page: int = 10
+    
+    @rx.var
+    def total_pages(self) -> int:
+        return (len(self.all_items) + self.items_per_page - 1) // self.items_per_page
+    
+    @rx.var
+    def paginated_items(self) -> list[dict]:
+        start = (self.current_page - 1) * self.items_per_page
+        end = start + self.items_per_page
+        return self.all_items[start:end]
+    
+    def next_page(self):
+        if self.current_page < self.total_pages:
+            self.current_page += 1
+    
+    def prev_page(self):
+        if self.current_page > 1:
+            self.current_page -= 1
+    
+    def goto_page(self, page: int):
+        if 1 <= page <= self.total_pages:
+            self.current_page = page
+```
+
+### State Access from Other States
+
+```python
+class UserState(rx.State):
+    username: str = "guest"
+
+class DashboardState(rx.State):
+    
+    @rx.var
+    def greeting(self) -> str:
+        """Access UserState from DashboardState"""
+        user_state = self.get_state(UserState)
+        return f"Welcome, {user_state.username}!"
+```
+
+### Optimistic Updates
+
+```python
+class OptimisticState(rx.State):
+    items: list[dict] = []
+    
+    async def add_item(self, item: dict):
+        # Optimistic update - add immediately
+        self.items.append(item)
+        
+        try:
+            # Try to save to backend
+            async with httpx.AsyncClient() as client:
+                await client.post("/api/items", json=item)
+        except Exception as e:
+            # Rollback on error
+            self.items.remove(item)
+            return rx.toast.error(f"Failed to add item: {e}")
+        
+        return rx.toast.success("Item added!")
+```

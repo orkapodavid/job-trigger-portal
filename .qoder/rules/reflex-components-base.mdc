@@ -1,0 +1,514 @@
+---
+description: Expert guidance for Reflex Component and Base classes - component creation, lifecycle, and customization
+globs: ["**/*.py"]
+---
+
+# You are an expert in Reflex Component architecture and Base class patterns
+
+## Core Principles
+
+- All Reflex classes inherit from `rx.Base` (Pydantic wrapper)
+- Components inherit from `rx.Component` for UI elements
+- Use `ComponentState` for bundling UI and state logic together
+- Override component methods to customize behavior and appearance
+
+## Base Class (reflex.base.Base)
+
+The foundation class for all Reflex classes, wrapping Pydantic with serialization.
+
+### Key Methods
+
+```python
+class MyData(rx.Base):
+    name: str
+    value: int
+
+# Serialization
+data = MyData(name="example", value=42)
+json_str = data.json()  # Convert to JSON string
+
+# Setting multiple fields
+updated = data.set(name="new_name", value=100)
+```
+
+### Best Practices
+
+```python
+# Use Base for data structures transferred between frontend and backend
+class UserProfile(rx.Base):
+    username: str
+    email: str
+    age: int | None = None
+    
+    def json(self) -> str:
+        """Serialize to JSON for API responses"""
+        return super().json()
+    
+    def set(self, **kwargs) -> "UserProfile":
+        """Update multiple fields immutably"""
+        return super().set(**kwargs)
+```
+
+## Component Class (reflex.components.component.Component)
+
+Base class for all UI components with style, event triggers, and props.
+
+### Creating Custom Components
+
+```python
+import reflex as rx
+from typing import Any
+
+class CustomButton(rx.Component):
+    """Custom button with enhanced styling"""
+    
+    # Define component props
+    label: rx.Var[str]
+    variant: rx.Var[str] = "solid"
+    size: rx.Var[str] = "md"
+    
+    def add_imports(self) -> dict[str, str] | list[dict[str, str]]:
+        """Add JavaScript imports for the component"""
+        return {
+            "react": "useState",
+            "react-icons/fa": "FaCheck",
+        }
+    
+    def add_hooks(self) -> list[str | rx.Var]:
+        """Add React hooks inside component function"""
+        return [
+            "const [isHovered, setIsHovered] = useState(false);",
+        ]
+    
+    def add_custom_code(self) -> list[str]:
+        """Add custom JavaScript code at module level"""
+        return [
+            """
+            const getButtonStyle = (variant, size) => {
+              const styles = { solid: 'bg-blue-500', outline: 'border-2' };
+              return styles[variant] || styles.solid;
+            };
+            """
+        ]
+    
+    @classmethod
+    def get_event_triggers(cls) -> dict[str, Any]:
+        """Define event triggers for the component"""
+        return {
+            "on_click": lambda: [],
+            "on_hover": lambda: [],
+        }
+    
+    def add_style(self) -> dict[str, Any] | None:
+        """Add default styles to the component"""
+        return {
+            "padding": "0.5rem 1rem",
+            "border_radius": "0.375rem",
+            "cursor": "pointer",
+            "transition": "all 0.2s",
+        }
+    
+    def render(self) -> dict:
+        """Render the component"""
+        return super().render()
+    
+    def get_ref(self) -> str | None:
+        """Get the ref name for the component"""
+        return f"ref_{self.id}"
+```
+
+### Using the create() Method
+
+```python
+# Create component instances
+button = CustomButton.create(
+    label="Click Me",
+    variant="solid",
+    size="lg",
+    on_click=State.handle_click,
+)
+```
+
+### Component Lifecycle Methods
+
+**add_imports**: Add JavaScript/React imports
+```python
+def add_imports(self) -> dict[str, str] | list[dict[str, str]]:
+    """Import external libraries"""
+    return [
+        {"react": "useState, useEffect"},
+        {"react-icons/ai": "AiOutlineHeart"},
+        {"./custom": "customFunction"},
+    ]
+```
+
+**add_hooks**: Insert React hooks
+```python
+def add_hooks(self) -> list[str | rx.Var]:
+    """Add hooks - each hook is a separate string"""
+    return [
+        # Each hook deduplicated separately
+        "const [count, setCount] = useState(0);",
+        f"const componentId = '{self.id}';",  # Unique per instance
+        "useEffect(() => { console.log('mounted'); }, []);",
+    ]
+```
+
+**add_custom_code**: Add module-level JavaScript
+```python
+def add_custom_code(self) -> list[str]:
+    """Define global functions or constants"""
+    return [
+        """
+        const THEME_COLORS = {
+          primary: '#3B82F6',
+          secondary: '#8B5CF6',
+        };
+        """,
+        """
+        function formatDate(date) {
+          return new Date(date).toLocaleDateString();
+        }
+        """,
+    ]
+```
+
+**add_style**: Apply component-specific styles
+```python
+def add_style(self) -> dict[str, Any] | None:
+    """Return style dict for the component"""
+    return {
+        "background_color": "var(--accent-color)",
+        "padding": "1rem",
+        "&:hover": {
+            "transform": "scale(1.05)",
+        },
+    }
+```
+
+### Getting Component Properties
+
+```python
+class MyComponent(rx.Component):
+    custom_prop: str
+    
+    @classmethod
+    def get_props(cls) -> set[str]:
+        """Get all unique props for the component"""
+        props = super().get_props()
+        return props | {"custom_prop", "extra_prop"}
+    
+    @classmethod
+    def get_initial_props(cls) -> set[str]:
+        """Get props that should be set initially"""
+        return {"custom_prop"}
+```
+
+## ComponentState (reflex.state.ComponentState)
+
+Bundle UI and state logic into a single reusable class.
+
+### Basic Pattern
+
+```python
+class Counter(rx.ComponentState):
+    """Counter component with its own state"""
+    
+    # State vars
+    count: int = 0
+    step: int = 1
+    
+    # Event handlers
+    def increment(self):
+        self.count += self.step
+    
+    def decrement(self):
+        self.count -= self.step
+    
+    def reset(self):
+        self.count = 0
+    
+    @classmethod
+    def get_component(cls, *children, **props) -> rx.Component:
+        """Define the UI for this component state"""
+        return rx.vstack(
+            rx.heading(f"Count: {cls.count}"),
+            rx.hstack(
+                rx.button("-", on_click=cls.decrement),
+                rx.button("Reset", on_click=cls.reset),
+                rx.button("+", on_click=cls.increment),
+            ),
+            *children,
+            **props,
+        )
+
+# Usage
+def index():
+    return rx.container(
+        Counter.create(),  # Each instance has separate state
+        Counter.create(step=5),  # Different initial props
+    )
+```
+
+### Advanced ComponentState Patterns
+
+**Form Component with Validation**
+```python
+class LoginForm(rx.ComponentState):
+    """Login form with built-in validation"""
+    
+    username: str = ""
+    password: str = ""
+    error_message: str = ""
+    is_loading: bool = False
+    
+    def set_username(self, value: str):
+        self.username = value
+        self.error_message = ""
+    
+    def set_password(self, value: str):
+        self.password = value
+        self.error_message = ""
+    
+    async def submit(self):
+        if not self.username or not self.password:
+            self.error_message = "Please fill in all fields"
+            return
+        
+        self.is_loading = True
+        # Perform login logic
+        await self.authenticate()
+        self.is_loading = False
+    
+    async def authenticate(self):
+        # API call logic
+        pass
+    
+    @classmethod
+    def get_component(cls, **props) -> rx.Component:
+        return rx.form(
+            rx.vstack(
+                rx.input(
+                    value=cls.username,
+                    on_change=cls.set_username,
+                    placeholder="Username",
+                ),
+                rx.input(
+                    value=cls.password,
+                    on_change=cls.set_password,
+                    type="password",
+                    placeholder="Password",
+                ),
+                rx.cond(
+                    cls.error_message != "",
+                    rx.text(cls.error_message, color="red"),
+                ),
+                rx.button(
+                    "Login",
+                    on_click=cls.submit,
+                    is_loading=cls.is_loading,
+                ),
+            ),
+            **props,
+        )
+```
+
+**Reusable Data Table**
+```python
+class DataTable(rx.ComponentState):
+    """Generic data table with sorting and filtering"""
+    
+    data: list[dict] = []
+    sort_column: str = ""
+    sort_direction: str = "asc"
+    filter_text: str = ""
+    
+    def set_filter(self, text: str):
+        self.filter_text = text
+    
+    def toggle_sort(self, column: str):
+        if self.sort_column == column:
+            self.sort_direction = "desc" if self.sort_direction == "asc" else "asc"
+        else:
+            self.sort_column = column
+            self.sort_direction = "asc"
+    
+    @rx.var
+    def filtered_data(self) -> list[dict]:
+        """Filter data based on search text"""
+        if not self.filter_text:
+            return self.data
+        return [
+            row for row in self.data
+            if self.filter_text.lower() in str(row.values()).lower()
+        ]
+    
+    @rx.var
+    def sorted_data(self) -> list[dict]:
+        """Sort filtered data"""
+        if not self.sort_column:
+            return self.filtered_data
+        
+        reverse = self.sort_direction == "desc"
+        return sorted(
+            self.filtered_data,
+            key=lambda x: x.get(self.sort_column, ""),
+            reverse=reverse,
+        )
+    
+    @classmethod
+    def get_component(cls, columns: list[str], **props) -> rx.Component:
+        return rx.vstack(
+            rx.input(
+                placeholder="Search...",
+                on_change=cls.set_filter,
+            ),
+            rx.table(
+                rx.thead(
+                    rx.tr(*[
+                        rx.th(
+                            col,
+                            on_click=lambda c=col: cls.toggle_sort(c),
+                            cursor="pointer",
+                        )
+                        for col in columns
+                    ])
+                ),
+                rx.tbody(
+                    rx.foreach(
+                        cls.sorted_data,
+                        lambda row: rx.tr(*[
+                            rx.td(row[col]) for col in columns
+                        ])
+                    )
+                ),
+            ),
+            **props,
+        )
+```
+
+## Best Practices
+
+### Component Organization
+
+```python
+# components/custom_button.py
+import reflex as rx
+
+class CustomButton(rx.Component):
+    """Reusable button component"""
+    
+    library = "custom-components"  # JavaScript library name
+    tag = "CustomButton"  # React component name
+    
+    # Props
+    label: rx.Var[str]
+    variant: rx.Var[str] = "primary"
+    
+    def _get_imports(self) -> dict:
+        return {"custom-components": {self.tag}}
+    
+    def add_style(self) -> dict:
+        return {
+            "padding": "0.5rem 1rem",
+            "border_radius": "0.25rem",
+        }
+
+# Export helper function
+def custom_button(label: str, **props) -> CustomButton:
+    """Helper to create custom button"""
+    return CustomButton.create(label=label, **props)
+```
+
+### State-Component Separation
+
+```python
+# Use ComponentState for self-contained components
+class SearchBox(rx.ComponentState):
+    query: str = ""
+    results: list = []
+    
+    async def search(self):
+        # Search logic here
+        pass
+    
+    @classmethod
+    def get_component(cls, **props):
+        return rx.vstack(
+            rx.input(value=cls.query, on_change=cls.set_query),
+            rx.button("Search", on_click=cls.search),
+            # ... results display
+        )
+
+# Use regular State for page-level logic
+class PageState(rx.State):
+    page_title: str = "My Page"
+    user_data: dict = {}
+    
+    def load_page(self):
+        # Page initialization
+        pass
+```
+
+### Type Safety
+
+```python
+from typing import Literal, Optional
+
+class StyledComponent(rx.Component):
+    # Use type hints for better IDE support
+    size: rx.Var[Literal["sm", "md", "lg"]] = "md"
+    color: rx.Var[str] = "blue"
+    is_disabled: rx.Var[bool] = False
+    custom_data: rx.Var[Optional[dict]] = None
+```
+
+## Common Patterns
+
+### Conditional Rendering in Components
+
+```python
+class ConditionalCard(rx.Component):
+    show_header: rx.Var[bool] = True
+    title: rx.Var[str] = ""
+    
+    def render(self) -> dict:
+        """Override render for complex conditional logic"""
+        # Implement custom rendering logic
+        return super().render()
+```
+
+### Component Composition
+
+```python
+def page_layout(*children, **props):
+    """Compose multiple components into a layout"""
+    return rx.box(
+        rx.container(
+            rx.vstack(
+                *children,
+                spacing="4",
+            ),
+            max_width="1200px",
+        ),
+        **props,
+    )
+```
+
+### Dynamic Component Creation
+
+```python
+def create_card(title: str, content: str, **props):
+    """Factory function for creating cards"""
+    return rx.card(
+        rx.heading(title, size="md"),
+        rx.text(content),
+        **props,
+    )
+
+# Usage
+cards = [
+    create_card("Card 1", "Content 1"),
+    create_card("Card 2", "Content 2"),
+]
+```

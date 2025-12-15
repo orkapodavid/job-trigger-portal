@@ -1,0 +1,182 @@
+---
+description: Main index for Python, Reflex, and FastAPI development rules - coordinates all specialized domain rules with generic, reusable patterns
+globs: 
+  - "**/*.py"
+  - "**/rxconfig.py"
+  - "**/requirements.txt"
+  - "**/pyproject.toml"
+---
+
+# Python, Reflex & FastAPI Development - Index
+
+You are an expert in Python, Reflex full-stack web development, and FastAPI backend development. This index coordinates specialized rules across different domains with generic, project-agnostic patterns.
+
+## Rule Organization
+
+This project uses domain-specific rule files for different areas of development, all designed to be generic and applicable to any project:
+
+### Core Framework Rules
+- **reflex-framework-base.mdc**: Core Reflex framework patterns, project structure, and fundamental concepts
+- **reflex-state-model.mdc**: State management with `rx.State`, computed vars, and `rx.Model` for database persistence
+- **reflex-var-system.mdc**: Var system for reactive UI bindings and compile-time safety
+- **reflex-events-handlers.mdc**: Event handling, async operations, and state modifications
+
+### Component & UI Rules  
+- **reflex-components-base.mdc**: Core component patterns, built-in components, and component composition
+- **reflex-layout.mdc**: Layout components (vstack, hstack, container, grid, flex)
+- **reflex-typography.mdc**: Text, heading, and typography components
+- **reflex-forms.mdc**: Form components, validation, database integration, and advanced form patterns
+- **reflex-data-display.mdc**: Tables, cards, lists, and data presentation
+- **reflex-overlay.mdc**: Modal, dialog, popover, and overlay components
+- **reflex-disclosure-media-utils.mdc**: Accordion, tabs, collapsible, and media components
+
+### Advanced Component Libraries
+- **reflex-charts.mdc**: Chart components (recharts integration)
+- **reflex-agchart.mdc**: AG Charts integration for advanced charting
+- **reflex-aggrid.mdc**: AG Grid integration for data tables
+- **reflex-tables.mdc**: Advanced table patterns and data grids
+- **reflex-dashboard.mdc**: Dashboard layouts and admin interfaces
+
+### Application Features
+- **reflex-app-config.mdc**: App configuration, rxconfig.py, and project settings
+- **reflex-cli-env-utils.mdc**: CLI commands, environment setup, and deployment utilities
+- **reflex-browser-apis.mdc**: Browser APIs (localStorage, cookies, navigation, window)
+- **reflex-dynamic-rendering.mdc**: Dynamic routing, conditional rendering, and runtime patterns
+- **reflex-azure-auth.mdc**: Authentication patterns with Azure AD and reflex-local-auth
+- **reflex-enterprise.mdc**: Enterprise patterns, scalability, and production deployments
+
+### Testing
+- **reflex-tests.mdc**: Comprehensive testing guide with Playwright and pytest
+
+### Backend Development
+- **fastapi.mdc**: FastAPI patterns for backend APIs, webhooks, and integrations
+- **sqlalchemy.mdc**: Database patterns with SQLAlchemy/SQLModel
+
+## General Principles
+
+### Code Style
+- Follow PEP 8 naming: snake_case for functions/variables, PascalCase for classes, UPPER_CASE for constants
+- Use type hints for all function parameters and returns
+- Write self-documenting code with meaningful names
+- Use descriptive variable names with auxiliary verbs (is_loading, has_permission, can_edit)
+
+### Project Structure
+```
+app_name/
+├── .cursor/
+│   └── rules/              # Domain-specific cursor rules
+├── assets/                 # Static files
+├── app_name/              # Main application
+│   ├── pages/             # Page modules
+│   ├── components/        # Reusable components
+│   ├── states/            # State modules (large apps)
+│   └── models.py          # Database models (rx.Model)
+├── api/                   # Optional: FastAPI backend
+├── tests/                 # Test files
+├── rxconfig.py            # Reflex configuration
+└── requirements.txt
+```
+
+### Development Workflow
+1. **Plan**: Define features, data models, and core workflows
+2. **Layout**: Create responsive structure with layout components
+3. **Components**: Build UI with Reflex components
+4. **State**: Implement state management and event handlers
+5. **Refine**: Polish styling, handle edge cases, test
+
+### Key Conventions
+- State classes inherit from `rx.State` for reactive state management
+- Event handlers are the ONLY way to modify state
+- Use `rx.Base` for custom data classes in state
+- Components are pure functions returning Reflex component objects
+- Use `rx.cond` and `rx.foreach` instead of Python if/for in components
+- Reference state vars via class attributes: `MyState.count`
+- Use `yield` in event handlers for UI updates during long operations
+
+### When to Use Each Technology
+
+**Reflex** (Full-stack Python web apps):
+- Complete web applications with frontend and backend in Python
+- Internal tools, dashboards, admin interfaces
+- Rapid prototyping and MVPs
+- Python-first teams avoiding JavaScript
+
+**FastAPI** (Backend APIs):
+- Microservices architecture separate from Reflex
+- Third-party integrations and webhooks  
+- High-performance APIs
+- Legacy API support alongside Reflex apps
+
+**SQLAlchemy/SQLModel** (Database):
+- Data persistence with SQL databases
+- Use `rx.Model` in Reflex apps (extends SQLModel)
+- Direct SQLAlchemy for FastAPI backends
+- Migrations with Alembic
+
+## Error Handling
+
+### State-Related Errors
+- Always use event handlers to modify state (never direct assignment in components)
+- Cannot use Python if/for statements with state vars in components
+- Cannot use Python len(), min(), max() on state vars (use var operations: `.length()`)
+- State vars must have type annotations
+
+### Common Mistakes
+- ❌ Using if/for statements with state vars in components
+- ❌ Modifying state directly outside event handlers
+- ❌ Forgetting type annotations on state variables
+- ❌ Using Python operations on state vars (use Var operations)
+- ❌ Editing `.web/` directory manually (auto-generated)
+- ❌ Mismatching event handler arguments with event triggers
+
+## Quick Reference
+
+### Install & Run
+```bash
+pip install reflex
+reflex init                  # Create new project  
+reflex run                   # Start dev server
+reflex deploy                # Deploy to Reflex Cloud
+```
+
+### Basic State Pattern
+```python
+import reflex as rx
+
+class AppState(rx.State):
+    count: int = 0
+    
+    def increment(self):
+        self.count += 1
+
+def index():
+    return rx.vstack(
+        rx.heading(f"Count: {AppState.count}"),
+        rx.button("Increment", on_click=AppState.increment),
+    )
+
+app = rx.App()
+app.add_page(index)
+```
+
+### Basic Component Pattern
+```python
+def card(title: str, content: str):
+    return rx.vstack(
+        rx.heading(title, size="6"),
+        rx.text(content),
+        spacing="4",
+        padding="4",
+        border="1px solid gray",
+    )
+```
+
+## Getting Help
+
+For specific domains, refer to the specialized rule files listed above. Each file contains:
+- Detailed API documentation
+- Code examples and patterns
+- Best practices and common pitfalls
+- Integration guidance
+
+When working on a specific feature, consult the relevant domain rules for detailed guidance.

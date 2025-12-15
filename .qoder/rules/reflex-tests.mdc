@@ -1,0 +1,1872 @@
+---
+description: Comprehensive guide for testing Reflex applications using Playwright and pytest with best practices
+globs: ["**/*.py", "**/test_*.py", "**/conftest.py"]
+---
+
+# Reflex Testing Guide
+
+You are an expert in testing Reflex applications using Playwright and pytest, following official Reflex testing patterns and best practices.
+
+## Table of Contents
+1. [Testing Setup](#testing-setup)
+2. [Test Configuration](#test-configuration)
+3. [AppHarness](#appharness)
+4. [Test Fixtures](#test-fixtures)
+5. [Playwright Selectors](#playwright-selectors)
+6. [Common Test Patterns](#common-test-patterns)
+7. [State and Event Testing](#state-and-event-testing)
+8. [Background Events Testing](#background-events-testing)
+9. [Server-Side Events Testing](#server-side-events-testing)
+10. [Authentication Testing](#authentication-testing)
+11. [Form Testing](#form-testing)
+12. [Database Setup](#database-setup)
+13. [Video Recording](#video-recording)
+14. [Best Practices](#best-practices)
+
+## Testing Setup
+
+### Dependencies
+Add to `requirements-dev.txt`:
+
+```txt
+pytest
+pytest-asyncio
+playwright
+reflex[testing]
+```
+
+### Project Structure
+```
+project/
+├── tests/
+│   ├── conftest.py          # Fixtures and configuration
+│   ├── test_components.py   # Component tests
+│   ├── test_forms.py        # Form functionality tests
+│   └── test_auth.py         # Authentication tests (if applicable)
+├── requirements-dev.txt      # Test dependencies
+└── requirements.txt          # App dependencies
+```
+
+### Install Playwright Browsers
+```bash
+playwright install
+```
+
+### Test Utilities
+Create a `utils.py` file for helper functions:
+
+```python
+from urllib.parse import urljoin
+from reflex.testing import AppHarness
+
+def get_full_url(app_harness: AppHarness, path: str) -> str:
+    """Properly join the app's frontend URL with a path.
+    
+    This ensures proper URL construction without double slashes,
+    which is important since React Router is stricter than Next.js
+    about URL formatting.
+    
+    Args:
+        app_harness: The AppHarness instance
+        path: The path to join (should start with /)
+        
+    Returns:
+        The properly joined full URL
+    """
+    if not app_harness.frontend_url:
+        raise ValueError("App harness frontend_url is None")
+    
+    return urljoin(app_harness.frontend_url, path)
+```
+
+## Test Configuration
+
+### conftest.py
+Create fixtures for app harness and test data:
+
+```python
+import sys
+from pathlib import Path
+import pytest
+import reflex as rx
+from reflex.testing import AppHarness
+
+# Add tests directory to Python path for absolute imports
+sys.path.insert(0, str(Path(__file__).parent))
+
+@pytest.fixture(scope="session")
+def my_app():
+    """Create app harness for testing."""
+    app_root = Path(__file__).parent.parent
+    
+    # Optional: Configure app settings if needed
+    # from my_app.config import SETTINGS
+    # Configure any necessary settings
+    
+    with AppHarness.create(root=app_root) as harness:
+        yield harness
+
+@pytest.fixture
+def browser_context_args():
+    """Configure browser context with video recording."""
+    return {
+        "record_video_dir": "test-videos/",
+        "record_video_size": {"width": 1280, "height": 720},
+    }
+
+# Example test user setup (customize based on your auth system)
+TEST_USER = "test_user"
+TEST_PASSWORD = "test_password_123"
+
+@pytest.fixture()
+def test_user() -> tuple[str, str]:
+    """Create or get test user in database."""
+    # Customize this based on your user model and authentication system
+    with rx.session() as session:
+        # Example for a generic user model
+        # test_user = session.exec(
+        #     User.select().where(User.username == TEST_USER)
+        # ).one_or_none()
+        # if test_user is None:
+        #     new_user = User()
+        #     new_user.username = TEST_USER
+        #     new_user.password = hash_password(TEST_PASSWORD)
+        #     new_user.enabled = True
+        #     session.add(new_user)
+        #     session.commit()
+        pass
+    return TEST_USER, TEST_PASSWORD
+```
+
+### Key Patterns
+- Use `scope="session"` for AppHarness to share across tests
+- Use function scope for database fixtures that need cleanup
+- Return tuples from fixtures for related test data
+- Create test data in database before tests run
+- Add tests directory to sys.path for absolute imports
+- Configure browser context for video recording
+
+## AppHarness
+
+### Basic Usage
+AppHarness manages the Reflex app lifecycle during testing:
+
+```python
+from utils import get_full_url
+
+def test_example(my_app: AppHarness, page: Page):
+    # AppHarness provides frontend_url
+    assert my_app.frontend_url is not None
+    
+    # Navigate to the app using helper function
+    page.goto(get_full_url(my_app, "/"))
+    
+    # Test interactions...
+```
+
+### Frontend URL
+Always check that frontend_url is available:
+
+```python
+assert my_app.frontend_url is not None
+```
+
+Use the `get_full_url` helper to properly construct URLs:
+
+```python
+from utils import get_full_url
+
+page.goto(get_full_url(my_app, "/"))
+page.goto(get_full_url(my_app, "/login"))
+page.goto(get_full_url(my_app, "/dashboard"))
+```
+
+**Why use `get_full_url`?**
+- Ensures proper URL construction without double slashes
+- React Router is stricter than Next.js about URL formatting
+- Uses `urllib.parse.urljoin` for proper path joining
+
+### Creating URL Patterns
+Use regex for dynamic URLs:
+
+```python
+import re
+
+def _url(url: str):
+    """Create URL pattern matcher."""
+    url = url.removeprefix("/").removesuffix("/")
+    assert my_app.frontend_url is not None
+    return re.compile(my_app.frontend_url + url)
+
+# Usage
+expect(page).to_have_url(_url("/edit/item/[0-9]+/"))
+```
+
+### Setting Timeouts
+For tests that may take longer (especially on CI):
+
+```python
+def test_slow_operation(my_app: AppHarness, page: Page):
+    assert my_app.frontend_url is not None
+    page.set_default_timeout(60000)  # 60 seconds
+    page.set_default_navigation_timeout(60000)
+    
+    page.goto(get_full_url(my_app, "/dashboard"))
+    # Test continues...
+```
+
+## Test Fixtures
+
+### Built-in Fixtures
+Playwright Pytest plugin provides these fixtures:
+
+```python
+from playwright.sync_api import Page, BrowserContext, Browser
+
+def test_with_page(page: Page):
+    """page fixture provides an isolated browser page."""
+    page.goto("https://example.com")
+
+def test_with_context(context: BrowserContext):
+    """context fixture provides an isolated browser context."""
+    page = context.new_page()
+    page.goto("https://example.com")
+
+def test_with_browser(browser: Browser):
+    """browser fixture provides the browser instance."""
+    context = browser.new_context()
+    page = context.new_page()
+```
+
+### Test Isolation
+Each test gets a fresh browser context:
+
+```python
+from playwright.sync_api import Page
+
+def test_example_test(page: Page):
+    # "page" belongs to an isolated BrowserContext
+    pass
+
+def test_another_test(page: Page):
+    # "page" in this second test is completely isolated
+    pass
+```
+
+### Custom Fixtures for Routes
+Define route URLs as fixtures:
+
+```python
+import pytest
+
+@pytest.fixture
+def dashboard_url() -> str:
+    from myapp.pages import dashboard
+    return dashboard.path
+
+@pytest.fixture
+def intro_page_url() -> str:
+    from myapp.pages import docs
+    return docs.getting_started.introduction.path
+
+def test_page(my_app: AppHarness, page: Page, dashboard_url: str):
+    page.goto(get_full_url(my_app, dashboard_url))
+    expect(page).to_have_url(re.compile(dashboard_url))
+```
+
+### beforeEach/afterEach with Fixtures
+Use function-scoped fixtures with autouse:
+
+```python
+import pytest
+from playwright.sync_api import Page
+
+@pytest.fixture(scope="function", autouse=True)
+def before_each_after_each(page: Page):
+    print("before the test runs")
+    # Setup code here
+    page.goto("https://myapp.com")
+    
+    yield
+    
+    print("after the test runs")
+    # Cleanup code here
+
+def test_main_navigation(page: Page):
+    # page already at starting URL
+    expect(page).to_have_url("https://myapp.com")
+```
+
+### beforeAll/afterAll with Fixtures
+Use module-scoped fixtures:
+
+```python
+import pytest
+
+@pytest.fixture(scope="module", autouse=True)
+def before_all_after_all():
+    print("runs before all tests in module")
+    # Setup code
+    
+    yield
+    
+    print("runs after all tests in module")
+    # Cleanup code
+```
+
+## Playwright Selectors
+
+### Playwright Auto-Waiting
+Playwright automatically waits for elements to be actionable:
+
+```python
+# No need to manually wait - Playwright does it automatically
+page.get_by_role("button", name="Submit").click()
+
+# Playwright waits for:
+# - Element to be visible
+# - Element to be stable (not animating)
+# - Element to receive events (not obscured)
+# - Element to be enabled
+```
+
+### Recommended Selectors (in priority order)
+
+#### 1. Role-Based Selectors (Best)
+Most robust and accessible:
+
+```python
+page.get_by_role("button", name="Submit")
+page.get_by_role("link", name="Create or Edit Forms")
+page.get_by_role("textbox")
+page.get_by_role("combobox")
+page.get_by_role("menuitem", name="Logout")
+```
+
+Common roles:
+- `button`: Buttons
+- `link`: Links
+- `textbox`: Text inputs
+- `combobox`: Select dropdowns
+- `menuitem`: Menu items
+- `heading`: Headings
+
+#### 2. Label Selectors
+For form inputs:
+
+```python
+page.get_by_label("name")
+page.get_by_label("Username")
+page.get_by_label("Password")
+page.get_by_label("Assuredly")  # For select options
+```
+
+#### 3. Placeholder Selectors
+For inputs with placeholders:
+
+```python
+page.get_by_placeholder("Username")
+page.get_by_placeholder("Password")
+page.get_by_placeholder("Name", exact=True)  # Exact match
+```
+
+#### 4. Text Selectors
+For visible text:
+
+```python
+page.get_by_text("Add Field")
+page.get_by_text("Save")
+page.get_by_text("Test Field")
+```
+
+#### 5. CSS Selectors
+For specific elements:
+
+```python
+page.locator("[name='field_name']")
+page.locator("button[type='submit']")
+page.locator(".AccordionTrigger")
+page.locator(".rt-Button")
+page.locator("id=username")
+```
+
+#### 6. Combining Selectors
+Filter and chain selectors:
+
+```python
+# Filter by text
+page.locator("button").filter(has_text="Select an option")
+
+# Nth element
+page.locator(".AccordionTrigger").nth(0)
+page.locator(".AccordionTrigger").nth(1)
+
+# First/Last
+triggers = page.locator(".AccordionTrigger")
+triggers.first
+triggers.last
+
+# Has selector (contains element)
+page.locator("button[type='submit']:has(svg)")
+
+# Complex filter
+menu_button = (
+    page.locator("div")
+    .filter(has_text=re.compile(r"^Form Designer$"))
+    .get_by_role("img")
+)
+```
+
+### Locating by ID
+For elements with stable IDs:
+
+```python
+# Using CSS selector with ID
+page.locator("[id='counter']")
+page.locator("#counter")
+
+# Combined with other locators
+counter_block = page.locator('[id="counter"]')
+heading = counter_block.get_by_role("heading")
+
+# With nth() for duplicate IDs (not recommended but common)
+page.locator('[id="background_demo"]').nth(1)
+```
+
+### Chaining Locators
+Combine locators for precise targeting:
+
+```python
+# Get element within a container
+upper_box = page.locator('[id="upper"]')
+input_field = upper_box.get_by_role("textbox")
+heading = upper_box.get_by_role("heading")
+
+# Chain multiple filters
+submit_button = page.locator("button[type='submit']:has(svg)")
+
+# Scroll element into view if needed
+run_button = page.get_by_role("button", name="Run")
+run_button.scroll_into_view_if_needed()
+run_button.click()
+```
+
+## Common Test Patterns
+
+### Basic Test Structure
+Playwright tests are simple - perform actions and assert state:
+
+```python
+import re
+from playwright.sync_api import Page, expect
+from reflex.testing import AppHarness
+from utils import get_full_url
+
+def test_basic_pattern(my_app: AppHarness, page: Page):
+    assert my_app.frontend_url is not None
+    
+    # 1. Navigate
+    page.goto(get_full_url(my_app, "/"))
+    
+    # 2. Perform actions
+    page.get_by_role("button", name="Click Me").click()
+    
+    # 3. Assert state
+    expect(page.get_by_text("Success")).to_be_visible()
+```
+
+### Navigation Testing
+```python
+def test_navigation(my_app: AppHarness, page: Page):
+    page.goto(get_full_url(my_app, "/"))
+    expect(page).to_have_url(_url("/"))
+    
+    page.get_by_role("link", name="Login").click()
+    expect(page).to_have_url(_url("/login/"))
+```
+
+### Form Filling
+```python
+def test_fill_form(page: Page):
+    page.get_by_placeholder("Username").fill("testuser")
+    page.get_by_placeholder("Password").fill("password123")
+    page.get_by_role("button").click()
+```
+
+### Waiting for Elements
+```python
+# Wait for visibility (recommended - auto-waiting)
+expect(page.get_by_text("Success")).to_be_visible()
+
+# Wait for URL change
+expect(page).to_have_url(_url("/dashboard/"))
+
+# Wait with custom timeout
+expect(page.get_by_text("Loading")).to_be_visible(timeout=10000)
+
+# Wait for text to change
+heading = page.get_by_role("heading")
+expect(heading).to_have_text("10", timeout=12000)
+
+# Wait for element to disappear
+expect(page.get_by_text("Loading")).not_to_be_visible()
+```
+
+### No Manual Waits Needed
+Playwright automatically waits - avoid these patterns:
+
+```python
+# ❌ BAD - Don't do this
+import time
+time.sleep(2)
+page.get_by_role("button").click()
+
+# ✅ GOOD - Playwright waits automatically
+page.get_by_role("button").click()
+
+# ❌ BAD - Don't manually wait
+page.wait_for_timeout(1000)
+
+# ✅ GOOD - Use assertions that wait
+expect(page.get_by_text("Ready")).to_be_visible()
+```
+
+### Element Counting
+```python
+triggers = page.locator(".AccordionTrigger")
+expect(triggers).to_have_count(2)
+
+contents = page.locator(".AccordionContent")
+expect(contents).to_have_count(2)
+```
+
+### Checking Visibility
+```python
+expect(page.get_by_text("Test Field")).to_be_visible()
+expect(page.get_by_text("Not logged in")).to_be_visible()
+```
+
+### Capturing Current URL
+```python
+form_fill_url = page.url
+
+# Navigate back to it later
+page.goto(form_fill_url)
+```
+
+### Extracting URL Parts
+```python
+# Get form ID from URL
+form_id = form_fill_url.strip("/").rpartition("/")[2]
+responses_url = f"responses/{form_id}/"
+page.goto(get_full_url(my_app, responses_url))
+```
+
+## State and Event Testing
+
+### Testing State Changes
+Test that state updates correctly in response to events:
+
+```python
+import re
+from playwright.sync_api import Page, expect
+from utils import get_full_url
+
+def test_counter(my_app: AppHarness, page: Page, intro_page_url: str):
+    assert my_app.frontend_url is not None
+    
+    page.goto(get_full_url(my_app, intro_page_url))
+    expect(page).to_have_url(re.compile(intro_page_url))
+    
+    counter_block = page.locator('[id="counter"]')
+    expect(counter_block).to_be_visible()
+    
+    # Find increment button (Playwright auto-scrolls into view)
+    increment_button = counter_block.get_by_role("button", name="Increment")
+    expect(increment_button).to_be_visible()
+    
+    # Click twice
+    increment_button.click()
+    increment_button.click()
+    
+    counter_heading = counter_block.get_by_role("heading")
+    expect(counter_heading).to_have_text(expected="2")
+    
+    # Decrement
+    decrement_button = counter_block.get_by_role("button", name="Decrement")
+    decrement_button.click()
+    
+    expect(counter_heading).to_have_text("1")
+```
+
+### Testing Computed Vars
+Test that computed variables update when dependencies change:
+
+```python
+def test_computed_vars(my_app: AppHarness, page: Page, computed_vars_url: str):
+    assert my_app.frontend_url is not None
+    
+    page.goto(get_full_url(my_app, computed_vars_url))
+    expect(page).to_have_url(re.compile(computed_vars_url))
+    
+    upper_box = page.locator('[id="upper"]')
+    
+    # Fill input
+    input_field = upper_box.get_by_role("textbox")
+    input_field.fill("upper")
+    input_field.blur()  # Trigger on_blur event
+    
+    # Check computed var updated
+    expect(upper_box.get_by_role("heading")).to_have_text("UPPER")
+```
+
+### Testing Event Chaining
+Test handlers that call other handlers:
+
+```python
+def test_handler_from_handler(my_app: AppHarness, page: Page, chaining_event_url: str):
+    assert my_app.frontend_url is not None
+    page.set_default_timeout(60000)
+    
+    page.goto(get_full_url(my_app, chaining_event_url))
+    expect(page).to_have_url(re.compile(chaining_event_url))
+    
+    chain_heading = page.locator('[id="call-handler"] > .rt-Flex > span')
+    expect(chain_heading).to_have_text("0")
+    
+    run_button = page.get_by_role("button", name="Run")
+    run_button.scroll_into_view_if_needed()
+    expect(run_button).to_be_visible()
+    
+    run_button.click()
+    
+    # Final state after all chained handlers complete
+    expect(chain_heading).to_have_text("10", timeout=10000)
+```
+
+### Testing Lambda Event Handlers
+Test inline lambda functions with event arguments:
+
+```python
+def test_lambdas(my_app: AppHarness, page: Page, event_argument_url: str):
+    assert my_app.frontend_url is not None
+    
+    page.goto(get_full_url(my_app, event_argument_url))
+    
+    inputs = page.get_by_role("textbox")
+    
+    def check_box_color(i, initial_color, input_color, expected_color):
+        # Check initial CSS
+        expect(page.locator(".rt-TextFieldRoot").nth(i)).to_have_css(
+            "background-color", initial_color
+        )
+        
+        # Fill and blur to trigger event
+        inputs.nth(i).fill(input_color)
+        inputs.nth(i).blur()
+        
+        # Check updated CSS
+        expect(page.locator(".rt-TextFieldRoot").nth(i)).to_have_css(
+            "background-color", expected_color
+        )
+    
+    check_box_color(1, "rgb(245, 168, 152)", "rgb(245, 168, 152)", "rgb(245, 168, 152)")
+    check_box_color(2, "rgb(60, 179, 113)", "DarkBlue", "rgb(60, 179, 113)")
+    check_box_color(3, "rgb(222, 173, 227)", "#AEADE3", "rgb(222, 173, 227)")
+```
+
+## Background Events Testing
+
+Test background tasks that run asynchronously:
+
+```python
+import re
+from playwright.sync_api import Page, expect
+
+def test_background_events(my_app: AppHarness, page: Page, background_events_url: str):
+    assert my_app.frontend_url is not None
+    page.set_default_timeout(60000)
+    page.set_default_navigation_timeout(60000)
+    
+    page.goto(get_full_url(my_app, background_events_url))
+    expect(page).to_have_url(re.compile(background_events_url))
+    
+    start_button = page.get_by_role("button", name="Start", exact=True)
+    reset_button = page.get_by_role("button", name="Reset")
+    expect(start_button).to_be_visible(timeout=60000)
+    
+    demo_block = page.locator('[id="background_demo"]').nth(1)
+    heading = demo_block.get_by_role("heading")
+    expect(heading).to_have_text("0 /")
+    
+    # Start background task
+    start_button.click()
+    
+    # Check intermediate state (use regex for range)
+    expect(heading).to_have_text(re.compile(r"[4-7] /"))
+    
+    # Reset and wait for completion
+    reset_button.click()
+    expect(heading).to_have_text("0 /")
+    expect(heading).to_have_text("10 /", timeout=12000)
+```
+
+### Key Patterns for Background Events
+- Set longer timeouts for async operations
+- Use regex patterns to match intermediate states
+- Test both start and stop/reset functionality
+- Allow sufficient time for background tasks to complete
+
+## Server-Side Events Testing
+
+Test special events like console logs and downloads:
+
+```python
+from playwright.sync_api import Page, expect
+
+def _predicate_console_message(msg):
+    """Filter function for console messages."""
+    return msg.text == "Hello World!"
+
+def _predicate_download(download):
+    """Filter function for downloads."""
+    return download.suggested_filename == "different_name_logo.png"
+
+def test_server_side_events(my_app: AppHarness, page: Page, server_side_events_url: str):
+    assert my_app.frontend_url is not None
+    
+    page.goto(get_full_url(my_app, server_side_events_url))
+    expect(page).to_have_url(re.compile(server_side_events_url))
+    
+    # Test console.log event
+    with page.expect_console_message(_predicate_console_message):
+        page.get_by_role("button", name="Log", exact=True).click()
+    
+    # Test scroll event
+    page.get_by_role("button", name="Scroll").click()
+    
+    # Test download event
+    with page.expect_download(_predicate_download):
+        page.get_by_role("button", name="Download", exact=True).click()
+```
+
+### Server-Side Event Patterns
+- Use `page.expect_console_message()` to test console.log
+- Use `page.expect_download()` to test file downloads
+- Create predicate functions to filter specific events
+- Use context managers (`with` statement) for event expectations
+
+### Testing Component Visibility
+Test that charts and complex components render correctly:
+
+```python
+def test_recharts(my_app: AppHarness, page: Page, scatterchart_page_url: str):
+    assert my_app.frontend_url is not None
+    
+    page.goto(get_full_url(my_app, scatterchart_page_url))
+    expect(page).to_have_url(re.compile(scatterchart_page_url))
+    
+    # Check elements are visible
+    input_field = page.get_by_placeholder("Enter a number")
+    symbols = page.locator(".recharts-symbols")
+    button = page.get_by_role("button", name="Compute")
+    
+    expect(input_field).to_be_visible()
+    expect(symbols).to_have_count(45)  # Exact count of chart elements
+    expect(button).to_be_visible()
+```
+
+## Authentication Testing
+
+### Login Flow
+```python
+from utils import get_full_url
+
+def test_login(
+    my_app: AppHarness,
+    page: Page,
+    test_user: tuple[str, str],
+):
+    page.goto(get_full_url(my_app, "/login"))
+    
+    # Fill login form
+    page.get_by_placeholder("Username").fill(test_user[0])
+    page.get_by_placeholder("Password").fill(test_user[1])
+    page.get_by_role("button").click()
+    
+    # Verify redirect
+    expect(page).to_have_url(_url("/dashboard/"))
+```
+
+### Protected Routes
+```python
+def test_protected_route(my_app: AppHarness, page: Page):
+    # Try to access protected route
+    page.goto(get_full_url(my_app, "/edit/form/"))
+    
+    # Should redirect to login
+    expect(page).to_have_url(_url("/login/"))
+```
+
+### Logout Flow
+```python
+def test_logout(page: Page):
+    # Open menu
+    menu_button = (
+        page.locator("div")
+        .filter(has_text=re.compile(r"^App Name$"))
+        .get_by_role("img")
+    )
+    menu_button.click()
+    
+    # Click logout
+    page.get_by_role("menuitem", name="Logout").click()
+    
+    # Verify redirect
+    expect(page).to_have_url(_url("/"))
+```
+
+## Form Testing
+
+### Creating a Form
+```python
+from utils import get_full_url
+
+def test_create_form(my_app: AppHarness, page: Page, test_user: tuple[str, str]):
+    # Login first
+    page.goto(get_full_url(my_app, "/login"))
+    page.get_by_placeholder("Username").fill(test_user[0])
+    page.get_by_placeholder("Password").fill(test_user[1])
+    page.get_by_role("button").click()
+    
+    # Navigate to form editor
+    expect(page).to_have_url(_url("/edit/form/"))
+    
+    # Type form name to create it
+    page.get_by_label("name").fill("Test Form")
+    
+    # URL should update with form ID
+    expect(page).to_have_url(_url("/edit/form/[0-9]+/"))
+```
+
+### Adding Fields
+```python
+def test_add_field(page: Page):
+    # Add a text field
+    page.get_by_text("Add Field").click()
+    expect(page).to_have_url(_url("/edit/form/[0-9]+/field/new/"))
+    
+    page.get_by_placeholder("Name", exact=True).fill("Test Field")
+    page.get_by_text("Save").click()
+    
+    expect(page).to_have_url(_url("/edit/form/[0-9]+/"))
+    expect(page.get_by_text("Test Field")).to_be_visible()
+```
+
+### Editing Fields
+```python
+def test_edit_field(page: Page):
+    # Click field to edit
+    page.get_by_text("Test Field").click()
+    expect(page).to_have_url(_url("/edit/form/[0-9]+/field/[0-9]+/"))
+    
+    # Rename field
+    page.get_by_placeholder("Name", exact=True).fill("Rename Field")
+    page.get_by_text("Save").click()
+    
+    # Verify update
+    expect(page.get_by_text("Rename Field")).to_be_visible()
+```
+
+### Testing Enumerated Fields
+```python
+def test_select_field_with_options(page: Page):
+    # Add select field
+    page.get_by_text("Add Field").click()
+    
+    field_name = page.locator("[name='field_name']")
+    expect(field_name).to_be_visible()
+    field_name.fill("Reflex?")
+    
+    # Change type to select
+    page.get_by_role("combobox").click()
+    page.get_by_label("select").click()
+    
+    # Open options editor
+    page.get_by_role("button", name="Edit Options").click()
+    
+    # Add option
+    submit_button = page.locator("button[type='submit']:has(svg)")
+    submit_button.click()
+    
+    # Fill option details
+    page.get_by_placeholder("Label").fill("Assuredly")
+    page.get_by_placeholder("Assuredly").fill("Yes")
+    
+    # Close options editor
+    page.get_by_role("button", name="Done").click()
+    
+    # Save field
+    page.get_by_role("button", name="Save").click()
+```
+
+### Testing Form Submission
+```python
+def test_submit_form(page: Page):
+    # Navigate to form
+    page.get_by_role("button", name="Preview").click()
+    expect(page).to_have_url(_url("/form/[0-9]+/"))
+    
+    # Fill form
+    text_input = page.get_by_role("textbox")
+    text_input.fill("My Response")
+    
+    select_input = page.locator("button").filter(has_text="Select an option")
+    select_input.click()
+    page.get_by_label("Option 1").click()
+    
+    # Submit
+    page.get_by_role("button", name="Submit").click()
+    expect(page).to_have_url(_url("/form/success/"))
+```
+
+### Testing Form Responses
+```python
+def test_view_responses(page: Page):
+    # Navigate to responses
+    page.get_by_role("button", name="Responses").click()
+    expect(page).to_have_url(_url("/responses/[0-9]+/"))
+    
+    # Check response count
+    triggers = page.locator(".AccordionTrigger")
+    expect(triggers).to_have_count(2)
+    
+    # Open first response
+    triggers.nth(0).click()
+    expect(page.get_by_text("My Response")).to_be_visible()
+    
+    # Delete response
+    delete_buttons = page.locator(".rt-Button")
+    delete_buttons.nth(0).click()
+    
+    # Verify deletion
+    expect(triggers).to_have_count(1)
+```
+
+## Database Setup
+
+### Creating Test Data
+Use fixtures to set up test data:
+
+```python
+@pytest.fixture()
+def test_form(test_user: tuple[str, str]):
+    """Create a test form in database."""
+    with rx.session() as session:
+        user = session.exec(
+            LocalUser.select().where(LocalUser.username == test_user[0])
+        ).one()
+        
+        form = Form(name="Test Form", owner_id=user.id)
+        session.add(form)
+        session.commit()
+        session.refresh(form)
+        
+        yield form
+        
+        # Cleanup
+        session.delete(form)
+        session.commit()
+```
+
+### Using Test Data
+```python
+def test_with_existing_form(
+    my_app: AppHarness,
+    page: Page,
+    test_user: tuple[str, str],
+    test_form: Form,
+):
+    # Login
+    page.goto(get_full_url(my_app, "/login"))
+    page.get_by_placeholder("Username").fill(test_user[0])
+    page.get_by_placeholder("Password").fill(test_user[1])
+    page.get_by_role("button").click()
+    
+    # Navigate directly to form
+    page.goto(get_full_url(my_app, f"/edit/form/{test_form.id}"))
+    
+    # Test interactions...
+```
+
+### Cleaning Up Test Data
+Use yield in fixtures for automatic cleanup:
+
+```python
+@pytest.fixture()
+def test_data():
+    # Setup
+    data = create_test_data()
+    
+    yield data
+    
+    # Cleanup (runs after test)
+    delete_test_data(data)
+```
+
+## Video Recording
+
+### Setup Video Recording
+Configure in conftest.py:
+
+```python
+import pytest
+from pathlib import Path
+
+@pytest.fixture
+def browser_context_args():
+    """Configure browser context with video recording."""
+    return {
+        "record_video_dir": "test-videos/",
+        "record_video_size": {"width": 1280, "height": 720},
+    }
+```
+
+### Automatic Video Management
+Implement hooks to save only failed test videos:
+
+```python
+import fcntl
+import json
+import os
+import time
+from pathlib import Path
+
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """Create metadata for failed tests and cleanup passed test videos."""
+    outcome = yield
+    report = outcome.get_result()
+    
+    if report.when == "call":
+        page = None
+        
+        # Find page object in fixtures
+        if hasattr(item, "funcargs"):
+            if "page" in item.funcargs:
+                page = item.funcargs["page"]
+            else:
+                for fixture_value in item.funcargs.values():
+                    if hasattr(fixture_value, "page") and hasattr(fixture_value.page, "video"):
+                        page = fixture_value.page
+                        break
+        
+        if page and hasattr(page, "video") and page.video:
+            try:
+                # Wait for video to be ready
+                video_path = None
+                for _ in range(3):
+                    try:
+                        video_path = page.video.path()
+                        if video_path and Path(video_path).exists():
+                            break
+                    except Exception:
+                        time.sleep(0.5)
+                
+                if not video_path:
+                    print(f"Failed to get video path for test: {item.name}")
+                    return
+                
+                video_file = Path(video_path)
+                
+                if report.failed:
+                    # Test failed - keep video and create metadata
+                    split_index = os.environ.get("PYTEST_SPLIT_INDEX", "1")
+                    metadata_file = Path("test-videos") / f"video_metadata_{split_index}.json"
+                    metadata_file.parent.mkdir(exist_ok=True)
+                    
+                    with metadata_file.open("a+") as f:
+                        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                        f.seek(0)
+                        try:
+                            content = f.read()
+                            metadata = json.loads(content) if content.strip() else {}
+                        except (json.JSONDecodeError, ValueError):
+                            metadata = {}
+                        
+                        metadata[video_file.name] = item.name
+                        
+                        f.seek(0)
+                        f.truncate()
+                        json.dump(metadata, f, indent=2)
+                else:
+                    # Test passed - remove video
+                    if video_file.exists():
+                        video_file.unlink()
+            
+            except Exception as e:
+                print(f"Failed to process video for test {item.name}: {e}")
+```
+
+### Video Recording Benefits
+- Automatic recording of all tests
+- Only failed test videos are kept
+- Metadata links video files to test names
+- Helps debugging CI failures
+- Saves disk space by removing passed test videos
+
+## Best Practices
+
+### 1. Use Descriptive Test Names
+```python
+def test_user_can_create_form_with_text_field():
+    # Clear what the test does
+    pass
+
+def test_anonymous_user_can_submit_form():
+    # Describes user type and action
+    pass
+
+def test_required_field_shows_validation_error():
+    # Describes expected behavior
+    pass
+```
+
+### 2. Set Appropriate Timeouts
+```python
+# For potentially slow operations (especially CI)
+page.set_default_timeout(60000)  # 60 seconds
+page.set_default_navigation_timeout(60000)
+
+# Per-assertion timeout
+expect(page.get_by_text("Loading")).to_be_visible(timeout=5000)
+
+# For background tasks
+expect(heading).to_have_text("10 /", timeout=12000)
+```
+
+### 3. Use Exact Matching When Needed
+```python
+# Avoid matching "Name (required)"
+page.get_by_placeholder("Name", exact=True)
+
+# Exact text match
+page.get_by_text("Submit", exact=True)
+```
+
+### 4. Test User Flows, Not Implementation
+```python
+# Good - tests user behavior
+def test_user_can_edit_field_name():
+    page.get_by_text("Field 1").click()
+    page.get_by_placeholder("Name").fill("New Name")
+    page.get_by_text("Save").click()
+    expect(page.get_by_text("New Name")).to_be_visible()
+
+# Bad - tests implementation details
+def test_field_editor_state_updates():
+    # Testing internal state instead of user experience
+    pass
+```
+
+### 5. Use Regex for URL Patterns
+```python
+# Match URLs with dynamic IDs
+expect(page).to_have_url(_url("/edit/form/[0-9]+/"))
+
+# Match multiple patterns
+expect(page).to_have_url(re.compile(r"/form/(new|[0-9]+)/"))
+```
+
+### 6. Group Related Assertions
+```python
+# Check multiple responses
+triggers = page.locator(".AccordionTrigger")
+expect(triggers).to_have_count(2)
+
+triggers.nth(0).click()
+expect(page.get_by_text("Response 1")).to_be_visible()
+expect(page.get_by_text("Value 1")).to_be_visible()
+```
+
+### 7. Capture State for Later Use
+```python
+# Capture URL for later navigation
+form_url = page.url
+
+# Do other actions...
+page.goto(form_url)  # Return to form
+
+# Extract data from URL
+form_id = page.url.strip("/").rpartition("/")[2]
+```
+
+### 8. Test Both Authenticated and Anonymous Users
+```python
+def test_anonymous_user_can_submit_form(my_app: AppHarness, page: Page):
+    # No login step
+    page.goto(get_full_url(my_app, "/form/1"))
+    # Fill and submit...
+
+def test_authenticated_user_can_edit_form(my_app: AppHarness, page: Page, test_user):
+    # Login first
+    # Then test editing...
+```
+
+### 9. Use Locators for Element Collections
+```python
+# Get all matching elements
+delete_buttons = page.locator(".rt-Button")
+
+# Interact with specific elements
+delete_buttons.nth(0).click()
+delete_buttons.nth(1).click()
+
+# Check count
+expect(delete_buttons).to_have_count(3)
+```
+
+### 10. Test Error States
+```python
+def test_required_field_validation():
+    page.get_by_role("button", name="Submit").click()
+    
+    # Should show error message
+    expect(page.get_by_text("This field is required")).to_be_visible()
+    
+    # Should not navigate away
+    expect(page).to_have_url(_url("/form/1/"))
+```
+
+### 11. Clean Test Data Between Tests
+```python
+@pytest.fixture(autouse=True)
+def cleanup_forms():
+    """Clean up forms after each test."""
+    yield
+    
+    with rx.session() as session:
+        forms = session.exec(Form.select()).all()
+        for form in forms:
+            if form.name.startswith("Test"):
+                session.delete(form)
+        session.commit()
+```
+
+### 12. Use Page Object Methods
+```python
+class FormPage:
+    def __init__(self, page: Page):
+        self.page = page
+    
+    def fill_name(self, name: str):
+        self.page.get_by_placeholder("Name").fill(name)
+    
+    def click_save(self):
+        self.page.get_by_role("button", name="Save").click()
+    
+    def add_field(self, name: str):
+        self.page.get_by_text("Add Field").click()
+        self.fill_name(name)
+        self.click_save()
+
+# Usage
+def test_with_page_object(page: Page):
+    form_page = FormPage(page)
+    form_page.add_field("Email")
+    expect(page.get_by_text("Email")).to_be_visible()
+```
+
+### 13. Don't Test Implementation Details
+Focus on user-facing behavior:
+
+```python
+# ✅ GOOD - Test user experience
+def test_user_can_edit_field_name():
+    page.get_by_text("Field 1").click()
+    page.get_by_placeholder("Name").fill("New Name")
+    page.get_by_text("Save").click()
+    expect(page.get_by_text("New Name")).to_be_visible()
+
+# ❌ BAD - Testing internal state
+def test_field_editor_state_updates():
+    # Don't test internal state variables
+    pass
+```
+
+### 14. Use Exact Matching When Needed
+```python
+# Exact match to avoid false positives
+page.get_by_placeholder("Name", exact=True)  # Won't match "Name (required)"
+page.get_by_role("button", name="Start", exact=True)  # Won't match "Start Process"
+page.get_by_text("Submit", exact=True)
+```
+
+### 15. Test CSS Properties
+Use `to_have_css()` for visual assertions:
+
+```python
+# Check background color
+expect(page.locator(".rt-TextFieldRoot").nth(0)).to_have_css(
+    "background-color", "rgb(245, 168, 152)"
+)
+
+# Check display property
+expect(page.locator(".modal")).to_have_css("display", "block")
+```
+
+### 16. Rely on Auto-Scrolling
+Playwright automatically scrolls elements into view:
+
+```python
+# ✅ GOOD - Playwright auto-scrolls
+page.get_by_role("button", name="Submit").click()
+
+# ✅ GOOD - Explicit scroll when needed
+run_button = page.get_by_role("button", name="Run")
+run_button.scroll_into_view_if_needed()
+run_button.click()
+
+# ❌ BAD - Manual scrolling usually unnecessary
+page.evaluate("window.scrollTo(0, 500)")
+```
+
+### 17. Use blur() to Trigger Events
+Trigger on_blur events by removing focus:
+
+```python
+input_field = page.get_by_role("textbox")
+input_field.fill("value")
+input_field.blur()  # Triggers on_blur event handler
+
+# Check result of on_blur handler
+expect(page.get_by_text("Updated")).to_be_visible()
+```
+
+## Advanced Patterns
+
+### Testing Modal Dialogs
+```python
+def test_modal_interaction(page: Page):
+    # Open modal
+    page.get_by_role("button", name="Edit Options").click()
+    
+    # Interact with modal content
+    page.get_by_placeholder("Label").fill("Option 1")
+    
+    # Close modal
+    page.get_by_role("button", name="Done").click()
+    
+    # Verify modal closed (element not visible)
+    expect(page.get_by_placeholder("Label")).not_to_be_visible()
+```
+
+### Testing Dynamic Content
+```python
+def test_dynamic_field_list(page: Page):
+    # Add multiple fields
+    for i in range(3):
+        page.get_by_text("Add Field").click()
+        page.get_by_placeholder("Name").fill(f"Field {i}")
+        page.get_by_text("Save").click()
+    
+    # Verify all appear
+    for i in range(3):
+        expect(page.get_by_text(f"Field {i}")).to_be_visible()
+```
+
+### Testing Accordion Components
+```python
+def test_accordion_responses(page: Page):
+    triggers = page.locator(".AccordionTrigger")
+    contents = page.locator(".AccordionContent")
+    
+    # Initially closed
+    expect(triggers).to_have_count(2)
+    
+    # Open first
+    triggers.nth(0).click()
+    expect(page.get_by_text("Response 1 data")).to_be_visible()
+    
+    # Close first, open second
+    triggers.nth(0).click()
+    triggers.nth(1).click()
+    expect(page.get_by_text("Response 2 data")).to_be_visible()
+```
+
+### Redirects After Login
+```python
+def test_redirect_after_login(my_app: AppHarness, page: Page, test_user: tuple[str, str]):
+    # Try to access protected page
+    page.goto(get_full_url(my_app, "/edit/form/"))
+    
+    # Should redirect to login
+    expect(page).to_have_url(_url("/login/"))
+    
+    # Login
+    page.get_by_placeholder("Username").fill(test_user[0])
+    page.get_by_placeholder("Password").fill(test_user[1])
+    page.get_by_role("button").click()
+    
+    # Should redirect back to original page
+    expect(page).to_have_url(_url("/edit/form/"))
+```
+
+## Common Assertions
+
+### Visibility Assertions
+```python
+from playwright.sync_api import expect
+
+# Element is visible
+expect(page.get_by_text("Hello")).to_be_visible()
+
+# Element is hidden
+expect(page.get_by_text("Hidden")).not_to_be_visible()
+expect(page.get_by_text("Hidden")).to_be_hidden()
+
+# Element is attached to DOM
+expect(page.get_by_text("Attached")).to_be_attached()
+```
+
+### State Assertions
+```python
+# Checkbox is checked
+expect(page.get_by_role("checkbox")).to_be_checked()
+expect(page.get_by_role("checkbox")).not_to_be_checked()
+
+# Element is enabled/disabled
+expect(page.get_by_role("button")).to_be_enabled()
+expect(page.get_by_role("button")).to_be_disabled()
+
+# Element is editable
+expect(page.get_by_role("textbox")).to_be_editable()
+
+# Element is focused
+expect(page.get_by_role("textbox")).to_be_focused()
+```
+
+### Text Assertions
+```python
+# Exact text match
+expect(page.get_by_role("heading")).to_have_text("Welcome")
+
+# Contains text
+expect(page.get_by_role("heading")).to_contain_text("Wel")
+
+# Regex match
+import re
+expect(page.get_by_role("heading")).to_have_text(re.compile(r"Welcome.*"))
+
+# Multiple elements text
+expect(page.locator("li")).to_have_text(["Item 1", "Item 2", "Item 3"])
+```
+
+### Value Assertions
+```python
+# Input has value
+expect(page.get_by_role("textbox")).to_have_value("test@example.com")
+
+# Input contains value
+expect(page.get_by_role("textbox")).to_have_value(re.compile(r".*@example.com"))
+
+# Select has selected option
+expect(page.get_by_role("combobox")).to_have_value("option1")
+```
+
+### Attribute Assertions
+```python
+# Has attribute
+expect(page.get_by_role("button")).to_have_attribute("type", "submit")
+
+# Has class
+expect(page.locator("div")).to_have_class("active")
+expect(page.locator("div")).to_have_class(re.compile(r"btn-.*"))
+
+# Has ID
+expect(page.locator("div")).to_have_id("main-content")
+```
+
+### Count Assertions
+```python
+# Element count
+expect(page.locator("li")).to_have_count(5)
+
+# No elements
+expect(page.locator(".error")).to_have_count(0)
+```
+
+### URL Assertions
+```python
+import re
+
+# Exact URL
+expect(page).to_have_url("https://example.com/dashboard")
+
+# URL pattern
+expect(page).to_have_url(re.compile(r".*/dashboard"))
+
+# Contains path
+expect(page).to_have_url(re.compile(r"/users/[0-9]+"))
+```
+
+### Title Assertions
+```python
+import re
+
+# Exact title
+expect(page).to_have_title("My App")
+
+# Title contains
+expect(page).to_have_title(re.compile("Dashboard.*"))
+```
+
+### CSS Assertions
+```python
+# CSS property value
+expect(page.locator(".button")).to_have_css("background-color", "rgb(0, 128, 0)")
+expect(page.locator(".text")).to_have_css("font-size", "16px")
+expect(page.locator(".container")).to_have_css("display", "flex")
+```
+
+### Negating Assertions
+```python
+# Use .not_ prefix for negation
+expect(page.get_by_text("Error")).not_to_be_visible()
+expect(page.get_by_role("button")).not_to_be_disabled()
+expect(page.locator(".error")).not_to_have_count(5)
+expect(page).not_to_have_url(re.compile(r".*/login"))
+```
+
+## Running Tests
+
+### Run All Tests
+```bash
+pytest
+```
+
+### Run Specific Test File
+```bash
+pytest tests/test_create_form.py
+```
+
+### Run Specific Test
+```bash
+pytest tests/test_create_form.py::test_create_form
+```
+
+### Run with Verbose Output
+```bash
+pytest -v
+```
+
+### Run with Debug Output
+```bash
+pytest -s  # Show print statements
+pytest -vv  # Very verbose
+```
+
+### Run in Headed Mode (See Browser)
+```bash
+pytest --headed
+```
+
+### Run in Slow Motion (for debugging)
+```bash
+pytest --slowmo=100  # 100ms delay between actions
+pytest --slowmo=1000  # 1 second delay
+```
+
+### Keep Browser Open on Failure
+```bash
+pytest --pause-on-failure
+```
+
+### Run Tests in Parallel
+```bash
+pip install pytest-xdist
+pytest -n auto  # Use all CPU cores
+pytest -n 4  # Use 4 workers
+```
+
+### Run Only Failed Tests
+```bash
+pytest --lf  # Last failed
+pytest --ff  # Failed first, then others
+```
+
+## Debugging Tests
+
+### Interactive Debugging with Playwright Inspector
+```python
+def test_with_pause(page: Page):
+    page.goto("https://example.com")
+    page.pause()  # Opens Playwright Inspector
+    # Execution pauses here - you can:
+    # - Step through actions
+    # - Try selectors
+    # - Inspect elements
+    # - Record actions
+```
+
+### Take Screenshots
+```python
+def test_with_screenshot(page: Page):
+    page.screenshot(path="screenshot.png")
+    
+    # Screenshot specific element
+    page.locator(".header").screenshot(path="header.png")
+    
+    # Full page screenshot
+    page.screenshot(path="fullpage.png", full_page=True)
+    
+    # Screenshot on failure
+    try:
+        expect(page.get_by_text("Expected")).to_be_visible()
+    except:
+        page.screenshot(path="failure.png")
+        raise
+```
+
+### Print Page Content
+```python
+def test_debug_content(page: Page):
+    print(page.content())  # Full HTML
+    print(page.title())    # Page title
+    print(page.url)        # Current URL
+    
+    # Print element text
+    element = page.get_by_role("button")
+    print(element.text_content())
+    print(element.inner_text())
+```
+
+### Check Element Attributes
+```python
+element = page.get_by_role("button")
+print(element.get_attribute("class"))
+print(element.get_attribute("id"))
+print(element.get_attribute("data-value"))
+
+# Check if attribute exists
+if element.get_attribute("disabled") is not None:
+    print("Button is disabled")
+```
+
+### Evaluate JavaScript
+```python
+# Get computed styles
+color = page.evaluate("window.getComputedStyle(document.body).backgroundColor")
+print(f"Background color: {color}")
+
+# Check element properties
+value = page.locator("input").evaluate("el => el.value")
+print(f"Input value: {value}")
+
+# Execute custom JavaScript
+page.evaluate("console.log('Debug message')")
+```
+
+### Use Tracing
+```python
+import pytest
+from playwright.sync_api import Page
+
+@pytest.fixture(scope="function", autouse=True)
+def trace_on_failure(page: Page, request):
+    # Start tracing before test
+    page.context.tracing.start(screenshots=True, snapshots=True)
+    
+    yield
+    
+    # Save trace only on failure
+    if request.node.rep_call.failed:
+        page.context.tracing.stop(path=f"trace-{request.node.name}.zip")
+    else:
+        page.context.tracing.stop()
+```
+
+View traces:
+```bash
+playwright show-trace trace-test_name.zip
+```
+
+### Debug Selector Issues
+```python
+# Check if selector matches anything
+locator = page.get_by_role("button", name="Submit")
+count = locator.count()
+print(f"Found {count} matching elements")
+
+if count == 0:
+    print("No elements found - selector might be wrong")
+elif count > 1:
+    print(f"Multiple elements found ({count}) - be more specific")
+    # Print all matching elements
+    for i in range(count):
+        print(f"Element {i}: {locator.nth(i).text_content()}")
+```
+
+### Wait for Network
+```python
+# Wait for specific network request
+with page.expect_request("**/api/submit") as request_info:
+    page.get_by_role("button", name="Submit").click()
+
+request = request_info.value
+print(f"Request URL: {request.url}")
+
+# Wait for response
+with page.expect_response("**/api/data") as response_info:
+    page.reload()
+
+response = response_info.value
+print(f"Response status: {response.status}")
+```
+
+## Testing Patterns Summary
+
+### The Testing Cycle
+1. **Navigate** - Go to page
+2. **Act** - Perform user actions (click, fill, etc.)
+3. **Assert** - Verify expected state
+4. **Cleanup** - Handled by fixtures automatically
+
+```python
+def test_complete_flow(my_app: AppHarness, page: Page):
+    # 1. Navigate
+    page.goto(get_full_url(my_app, "/"))
+    expect(page).to_have_url(re.compile("/"))
+    
+    # 2. Act
+    page.get_by_role("button", name="Start").click()
+    page.get_by_role("textbox").fill("value")
+    page.get_by_role("button", name="Submit").click()
+    
+    # 3. Assert
+    expect(page).to_have_url(re.compile("/success"))
+    expect(page.get_by_text("Success!")).to_be_visible()
+    
+    # 4. Cleanup - automatic via fixtures
+```
+
+### Key Principles
+1. **Auto-waiting** - Playwright waits automatically, no manual waits needed
+2. **Isolation** - Each test gets fresh browser context
+3. **User-centric** - Test what users see and do, not implementation
+4. **Resilient selectors** - Prefer role-based and semantic selectors
+5. **Assertions describe expectations** - They wait until condition is met
+6. **No flaky tests** - Playwright's design eliminates race conditions
+
+### Common Mistakes to Avoid
+```python
+# ❌ DON'T: Manual sleeps
+import time
+time.sleep(2)
+
+# ✅ DO: Use assertions that auto-wait
+expect(page.get_by_text("Loaded")).to_be_visible()
+
+# ❌ DON'T: Manual wait_for_timeout
+page.wait_for_timeout(1000)
+
+# ✅ DO: Wait for specific condition
+expect(page.get_by_role("button")).to_be_enabled()
+
+# ❌ DON'T: Overly specific selectors
+page.locator("div.container > div.row > div.col > button.btn-primary")
+
+# ✅ DO: User-facing selectors
+page.get_by_role("button", name="Submit")
+
+# ❌ DON'T: Test internal state
+result = page.evaluate("window.appState.isLoggedIn")
+
+# ✅ DO: Test visible behavior
+expect(page.get_by_text("Welcome, User")).to_be_visible()
+```
+
+## Quick Reference
+
+### Essential Imports
+```python
+import re
+import pytest
+from playwright.sync_api import Page, expect
+from reflex.testing import AppHarness
+from utils import get_full_url
+```
+
+### Test Template
+```python
+def test_feature_name(my_app: AppHarness, page: Page):
+    """Test that [describe what the test verifies]."""
+    assert my_app.frontend_url is not None
+    
+    # Navigate
+    page.goto(get_full_url(my_app, "/path"))
+    expect(page).to_have_url(re.compile("/path"))
+    
+    # Act
+    page.get_by_role("button", name="Action").click()
+    
+    # Assert
+    expect(page.get_by_text("Expected Result")).to_be_visible()
+```
+
+### Common Selectors Quick Reference
+```python
+# By role (BEST)
+page.get_by_role("button", name="Text")
+page.get_by_role("link", name="Text")
+page.get_by_role("textbox")
+page.get_by_role("heading")
+page.get_by_role("combobox")
+
+# By text
+page.get_by_text("Exact text")
+page.get_by_text(re.compile(r"pattern"))
+
+# By label
+page.get_by_label("Field label")
+
+# By placeholder
+page.get_by_placeholder("Placeholder text")
+
+# By CSS
+page.locator(".class-name")
+page.locator("#id-name")
+page.locator("[attribute='value']")
+
+# Chaining
+container = page.locator('[id="container"]')
+button = container.get_by_role("button")
+```
+
+### Common Assertions Quick Reference
+```python
+# Visibility
+expect(locator).to_be_visible()
+expect(locator).to_be_hidden()
+
+# Text
+expect(locator).to_have_text("text")
+expect(locator).to_contain_text("text")
+
+# State
+expect(locator).to_be_enabled()
+expect(locator).to_be_disabled()
+expect(locator).to_be_checked()
+
+# Value
+expect(locator).to_have_value("value")
+
+# Count
+expect(locator).to_have_count(5)
+
+# URL
+expect(page).to_have_url(re.compile(r"pattern"))
+
+# CSS
+expect(locator).to_have_css("property", "value")
+```

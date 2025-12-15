@@ -1,0 +1,636 @@
+---
+description: Guide for Reflex Enterprise features - premium components, configuration, and deployment patterns
+globs: ["**/*.py", "**/rxconfig.py"]
+---
+
+# Reflex Enterprise Features Guide
+
+You are an expert in Reflex Enterprise features and configuration for professional applications.
+
+## Core Principles
+
+- Use `reflex_enterprise` (rxe) for enterprise features and components
+- Configure enterprise options through `rxe.Config` instead of `rx.Config`
+- Use `rxe.App()` to enable enterprise component access
+- Understand licensing tiers: Pro (Cloud), Team (Self-hosted), Enterprise
+- Handle "Built with Reflex" badge configuration appropriately
+
+## Installation and Setup
+
+### Installation
+
+```bash
+# Install reflex-enterprise alongside reflex
+pip install reflex reflex-enterprise
+
+# Or with poetry
+poetry add reflex reflex-enterprise
+```
+
+### Basic Setup
+
+**Main Application File**
+```python
+import reflex as rx
+import reflex_enterprise as rxe
+
+# Use rxe.App instead of rx.App for enterprise features
+app = rxe.App(
+    theme=rx.theme(),
+    style={},
+    stylesheets=[],
+)
+```
+
+**Configuration File (rxconfig.py)**
+```python
+import reflex_enterprise as rxe
+
+config = rxe.Config(
+    app_name="your_app_name",
+    # Enterprise-specific options
+    show_built_with_reflex=True,  # Pro tier to disable
+    use_single_port=False,  # Team tier feature
+    
+    # Standard config options still available
+    frontend_port=3000,
+    backend_port=8000,
+    db_url="sqlite:///reflex.db",
+)
+```
+
+## Enterprise Configuration Options
+
+### Built with Reflex Badge
+
+Control the "Built with Reflex" badge displayed in bottom-right corner.
+
+**Configuration**
+```python
+# rxconfig.py
+import reflex_enterprise as rxe
+
+config = rxe.Config(
+    app_name="your_app_name",
+    show_built_with_reflex=True,  # Default: True (badge shown)
+)
+```
+
+**Hide Badge (Pro/Team Tier Required)**
+```python
+config = rxe.Config(
+    app_name="your_app_name",
+    show_built_with_reflex=False,  # Hides the badge
+)
+```
+
+**Tier Requirements**
+- **Free users**: Badge always shown
+- **Pro tier (Reflex Cloud)**: Can hide badge
+- **Team tier (Self-hosted)**: Can hide badge
+
+### Single Port Proxy
+
+Enable single-port deployment where backend proxies frontend requests.
+
+**Configuration**
+```python
+# rxconfig.py
+import reflex_enterprise as rxe
+
+config = rxe.Config(
+    app_name="your_single_port_app",
+    use_single_port=True,  # Team tier required
+    backend_port=8000,  # Both frontend and backend served on this port
+)
+```
+
+**How It Works**
+- Backend receives all requests on single port
+- Handles API requests directly
+- Proxies non-API requests to frontend
+- Useful for deployment scenarios with port restrictions
+
+**Tier Requirements**
+- **Team tier**: Available for self-hosted deployments
+- **Cloud deployment**: Not supported (ignored if configured)
+
+**Deployment Example**
+```python
+# Production single-port configuration
+import os
+import reflex_enterprise as rxe
+
+config = rxe.Config(
+    app_name="your_production_app",
+    use_single_port=True,
+    backend_port=int(os.getenv("PORT", 8000)),  # Use deployment port
+    api_url=os.getenv("API_URL", "http://localhost:8000"),
+    show_built_with_reflex=False,  # Hide badge for production
+)
+```
+
+## Enterprise Components
+
+### Interactive Maps
+
+Enterprise package includes Leaflet-based mapping components.
+
+**Basic Map**
+```python
+import reflex as rx
+import reflex_enterprise as rxe
+
+class MapState(rx.State):
+    center: tuple[float, float] = (40.7128, -74.0060)  # Default coordinates
+    zoom: int = 13
+    
+    def update_center(self, lat: float, lng: float):
+        self.center = (lat, lng)
+
+def map_page():
+    return rx.container(
+        rx.heading("Interactive Map"),
+        rxe.map(
+            center=MapState.center,
+            zoom=MapState.zoom,
+            style={"height": "400px", "width": "100%"},
+        ),
+        rx.button(
+            "Center on Location",
+            on_click=lambda: MapState.update_center(37.7749, -122.4194),
+        ),
+    )
+```
+
+**Map with Markers**
+```python
+import reflex as rx
+import reflex_enterprise as rxe
+
+class MapState(rx.State):
+    markers: list[dict] = [
+        {"lat": 40.7128, "lng": -74.0060, "popup": "Location 1"},
+        {"lat": 37.7749, "lng": -122.4194, "popup": "Location 2"},
+        {"lat": 34.0522, "lng": -118.2437, "popup": "Location 3"},
+    ]
+    
+    def add_marker(self, lat: float, lng: float, popup: str):
+        self.markers.append({"lat": lat, "lng": lng, "popup": popup})
+
+def advanced_map():
+    return rx.container(
+        rxe.map(
+            center=(39.8283, -98.5795),  # Center coordinates
+            zoom=4,
+            markers=MapState.markers,
+            on_click=MapState.handle_map_click,  # Handle map interactions
+            style={"height": "500px", "width": "100%"},
+        ),
+        rx.text(f"Total markers: {MapState.markers.length}"),
+    )
+```
+
+**Map Layers and Events**
+```python
+import reflex as rx
+import reflex_enterprise as rxe
+
+class MapState(rx.State):
+    selected_layer: str = "streets"
+    click_coordinates: tuple[float, float] = (0, 0)
+    
+    def handle_map_click(self, event):
+        """Handle map click events"""
+        self.click_coordinates = (event["lat"], event["lng"])
+        return rx.toast.info(f"Clicked: {self.click_coordinates}")
+    
+    def change_layer(self, layer_name: str):
+        """Switch map layer"""
+        self.selected_layer = layer_name
+
+def layered_map():
+    return rx.vstack(
+        rx.hstack(
+            rx.button("Streets", on_click=lambda: MapState.change_layer("streets")),
+            rx.button("Satellite", on_click=lambda: MapState.change_layer("satellite")),
+            rx.button("Terrain", on_click=lambda: MapState.change_layer("terrain")),
+        ),
+        rxe.map(
+            center=(40.7128, -74.0060),
+            zoom=12,
+            layer=MapState.selected_layer,
+            on_click=MapState.handle_map_click,
+            style={"height": "400px", "width": "100%"},
+        ),
+        rx.text(f"Last click: {MapState.click_coordinates}"),
+    )
+```
+
+## Environment Configuration
+
+### Development Environment
+
+```python
+# .env.development
+REFLEX_APP_NAME=myapp_dev
+REFLEX_FRONTEND_PORT=3000
+REFLEX_BACKEND_PORT=8000
+REFLEX_SHOW_BUILT_WITH_REFLEX=true
+REFLEX_USE_SINGLE_PORT=false
+REFLEX_LOGLEVEL=DEBUG
+```
+
+### Production Environment
+
+```python
+# .env.production
+REFLEX_APP_NAME=myapp
+REFLEX_BACKEND_PORT=8000
+REFLEX_SHOW_BUILT_WITH_REFLEX=false  # Requires Pro/Team tier
+REFLEX_USE_SINGLE_PORT=true  # Requires Team tier
+REFLEX_LOGLEVEL=INFO
+DATABASE_URL=postgresql://user:pass@prod-server/db
+```
+
+### Configuration Loading
+
+```python
+# rxconfig.py
+import os
+import reflex_enterprise as rxe
+
+# Load environment-specific settings
+environment = os.getenv("ENVIRONMENT", "development")
+env_file = f".env.{environment}"
+
+config = rxe.Config(
+    app_name=os.getenv("REFLEX_APP_NAME", "myapp"),
+    env_file=env_file,
+    
+    # Enterprise features
+    show_built_with_reflex=os.getenv("REFLEX_SHOW_BUILT_WITH_REFLEX", "true").lower() == "true",
+    use_single_port=os.getenv("REFLEX_USE_SINGLE_PORT", "false").lower() == "true",
+    
+    # Standard configuration
+    frontend_port=int(os.getenv("REFLEX_FRONTEND_PORT", 3000)),
+    backend_port=int(os.getenv("REFLEX_BACKEND_PORT", 8000)),
+    db_url=os.getenv("DATABASE_URL", "sqlite:///reflex.db"),
+    redis_url=os.getenv("REDIS_URL"),
+)
+```
+
+## Deployment Patterns
+
+### Self-Hosted with Single Port
+
+```python
+# rxconfig.py for self-hosted deployment
+import os
+import reflex_enterprise as rxe
+
+config = rxe.Config(
+    app_name="production_app",
+    
+    # Enterprise features (Team tier)
+    use_single_port=True,
+    show_built_with_reflex=False,
+    
+    # Production settings
+    backend_port=int(os.getenv("PORT", 8000)),
+    api_url=os.getenv("API_URL", f"http://localhost:{os.getenv('PORT', 8000)}"),
+    deploy_url=os.getenv("DEPLOY_URL", f"http://localhost:{os.getenv('PORT', 8000)}"),
+    
+    # Database and caching
+    db_url=os.getenv("DATABASE_URL"),
+    redis_url=os.getenv("REDIS_URL"),
+    state_manager_mode=rxe.StateManagerMode.REDIS if os.getenv("REDIS_URL") else rxe.StateManagerMode.DISK,
+    
+    # Security
+    cors_allowed_origins=os.getenv("CORS_ALLOWED_ORIGINS", "*").split(","),
+)
+```
+
+### Reflex Cloud Deployment
+
+```python
+# rxconfig.py for Reflex Cloud (Pro tier)
+import reflex_enterprise as rxe
+
+config = rxe.Config(
+    app_name="cloud_app",
+    
+    # Enterprise features (Pro tier)
+    show_built_with_reflex=False,  # Can hide badge on Pro tier
+    # use_single_port=True,  # Not supported on cloud - will be ignored
+    
+    # Cloud automatically handles ports and URLs
+    telemetry_enabled=True,
+)
+```
+
+### Docker Deployment
+
+```dockerfile
+# Dockerfile for enterprise app with single port
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+# Copy application
+COPY . .
+
+# Set environment variables
+ENV REFLEX_USE_SINGLE_PORT=true
+ENV REFLEX_SHOW_BUILT_WITH_REFLEX=false
+ENV PORT=8000
+
+# Expose single port
+EXPOSE 8000
+
+# Start application
+CMD ["reflex", "run", "--env", "prod"]
+```
+
+## Licensing and Tiers
+
+### Feature Availability
+
+**Free Tier**
+- Access to enterprise components with "Built with Reflex" badge
+- Badge cannot be hidden
+- No single-port proxy
+
+**Pro Tier (Reflex Cloud)**
+- Hide "Built with Reflex" badge
+- All enterprise components
+- Cloud deployment optimizations
+- No single-port proxy (not needed on cloud)
+
+**Team Tier (Self-hosted)**
+- Hide "Built with Reflex" badge
+- Single-port proxy configuration
+- All enterprise components
+- Self-hosted deployment
+
+**Enterprise Tier**
+- Custom enterprise features
+- Priority support
+- Custom licensing terms
+
+### Tier Detection
+
+```python
+import reflex as rx
+import reflex_enterprise as rxe
+
+class AppState(rx.State):
+    
+    def check_enterprise_features(self):
+        """Check which enterprise features are available"""
+        features = []
+        
+        # Check if badge can be hidden (Pro/Team tier)
+        if hasattr(rxe.Config, 'show_built_with_reflex'):
+            features.append("Badge control available")
+        
+        # Check if single port is supported (Team tier)
+        if hasattr(rxe.Config, 'use_single_port'):
+            features.append("Single port proxy available")
+        
+        return features
+
+def feature_status():
+    return rx.container(
+        rx.heading("Enterprise Features"),
+        rx.text("Available features:"),
+        rx.foreach(
+            AppState.check_enterprise_features(),
+            lambda feature: rx.text(f"✓ {feature}"),
+        ),
+    )
+```
+
+## Best Practices
+
+### Enterprise Configuration
+
+```python
+# config/enterprise.py
+import os
+import reflex_enterprise as rxe
+
+def create_enterprise_config():
+    """Create enterprise configuration based on environment"""
+    
+    # Determine tier based on environment
+    is_production = os.getenv("REFLEX_ENV_MODE") == "prod"
+    is_cloud = os.getenv("REFLEX_DEPLOYMENT") == "cloud"
+    has_team_tier = os.getenv("REFLEX_TEAM_TIER") == "true"
+    
+    return rxe.Config(
+        app_name=os.getenv("REFLEX_APP_NAME", "myapp"),
+        
+        # Enterprise features
+        show_built_with_reflex=not (has_team_tier and is_production),
+        use_single_port=has_team_tier and not is_cloud and is_production,
+        
+        # Environment-specific settings
+        frontend_port=None if is_production else 3000,
+        backend_port=int(os.getenv("PORT", 8000)) if is_production else 8000,
+        
+        # Production optimizations
+        telemetry_enabled=is_production,
+        loglevel=rxe.LogLevel.INFO if is_production else rxe.LogLevel.DEBUG,
+    )
+
+config = create_enterprise_config()
+```
+
+### Component Usage
+
+```python
+# components/enterprise_components.py
+import reflex as rx
+import reflex_enterprise as rxe
+
+def enterprise_map(
+    center: tuple[float, float] = (40.7128, -74.0060),
+    zoom: int = 10,
+    markers: list[dict] = None,
+    **props
+):
+    """Reusable enterprise map component"""
+    
+    default_style = {
+        "height": "400px", 
+        "width": "100%",
+        "border_radius": "8px",
+        "box_shadow": "0 2px 8px rgba(0,0,0,0.1)",
+    }
+    
+    return rxe.map(
+        center=center,
+        zoom=zoom,
+        markers=markers or [],
+        style={**default_style, **props.get("style", {})},
+        **{k: v for k, v in props.items() if k != "style"}
+    )
+
+def location_picker(on_location_select):
+    """Enterprise map for location selection"""
+    
+    return rx.vstack(
+        rx.text("Click on the map to select a location:"),
+        rxe.map(
+            center=(40.7128, -74.0060),
+            zoom=10,
+            on_click=on_location_select,
+            style={"height": "300px", "width": "100%"},
+        ),
+        width="100%",
+    )
+```
+
+### Error Handling
+
+```python
+# utils/enterprise_utils.py
+import reflex as rx
+import reflex_enterprise as rxe
+
+class EnterpriseState(rx.State):
+    
+    def handle_enterprise_error(self, error: Exception):
+        """Handle enterprise-specific errors"""
+        
+        if "enterprise" in str(error).lower():
+            return rx.toast.error(
+                "Enterprise feature not available. Check your license tier.",
+                position="top-right",
+            )
+        
+        if "built with reflex" in str(error).lower():
+            return rx.toast.warning(
+                "Badge configuration requires Pro or Team tier.",
+                position="top-right",
+            )
+        
+        # Generic error handling
+        return rx.toast.error(f"Error: {error}")
+
+def enterprise_feature_wrapper(component_func):
+    """Decorator to wrap enterprise features with error handling"""
+    
+    def wrapper(*args, **kwargs):
+        try:
+            return component_func(*args, **kwargs)
+        except ImportError:
+            return rx.text(
+                "Enterprise features not available. Install reflex-enterprise.",
+                color="red",
+            )
+        except Exception as e:
+            return rx.text(
+                f"Enterprise feature error: {e}",
+                color="orange",
+            )
+    
+    return wrapper
+
+@enterprise_feature_wrapper
+def safe_enterprise_map(**props):
+    """Safely use enterprise map with fallback"""
+    return rxe.map(**props)
+```
+
+## Common Patterns
+
+### Multi-Tier Application Structure
+
+```python
+# app/main.py
+import reflex as rx
+import reflex_enterprise as rxe
+from .config import get_config
+from .components import enterprise_components
+
+# Use enterprise app
+app = rxe.App(
+    theme=rx.theme(),
+    style={},
+)
+
+# Configure based on tier
+config = get_config()
+
+# Add pages with enterprise features
+@rx.page("/", title="Home")
+def index():
+    return rx.container(
+        rx.heading("Enterprise App"),
+        enterprise_components.feature_showcase(),
+    )
+
+@rx.page("/map", title="Interactive Map")
+def map_page():
+    return rx.container(
+        rx.heading("Location Services"),
+        enterprise_components.enterprise_map(),
+    )
+```
+
+### Configuration Management
+
+```python
+# config/__init__.py
+import os
+import reflex_enterprise as rxe
+
+def get_config():
+    """Get configuration based on environment and tier"""
+    
+    tier = os.getenv("REFLEX_TIER", "free")
+    environment = os.getenv("ENVIRONMENT", "development")
+    
+    base_config = {
+        "app_name": "enterprise_app",
+        "telemetry_enabled": environment == "production",
+    }
+    
+    if tier in ["pro", "team"]:
+        base_config["show_built_with_reflex"] = False
+    
+    if tier == "team" and environment == "production":
+        base_config["use_single_port"] = True
+        base_config["backend_port"] = int(os.getenv("PORT", 8000))
+    else:
+        base_config["frontend_port"] = 3000
+        base_config["backend_port"] = 8000
+    
+    return rxe.Config(**base_config)
+```
+
+### Development vs Production
+
+```bash
+# Development
+export REFLEX_TIER=free
+export ENVIRONMENT=development
+reflex run
+
+# Production (Team tier)
+export REFLEX_TIER=team
+export ENVIRONMENT=production
+export PORT=8000
+reflex run --env prod
+
+# Cloud deployment (Pro tier)
+export REFLEX_TIER=pro
+export REFLEX_DEPLOYMENT=cloud
+reflex cloud deploy
+```

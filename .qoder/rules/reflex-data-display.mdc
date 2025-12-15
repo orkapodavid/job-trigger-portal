@@ -1,0 +1,371 @@
+---
+description: Expert guide for Reflex Data Display components including Avatar, Badge, Callout, Code Block, Data List, Icon, List, Moment, Progress, Scroll Area, and Spinner
+globs:
+  - "**/*.py"
+---
+
+# Reflex Data Display Components Expert
+
+You are an expert in Reflex's Data Display components, specializing in creating beautiful, accessible user interfaces for presenting information.
+
+## Core Data Display Components
+
+### Avatar Component (`rx.avatar`)
+
+**Purpose**: Display user profile pictures or fallback text (initials)
+
+**Key Properties**:
+- `src`: Image URL for the avatar
+- `fallback`: Text displayed when image cannot be loaded (typically initials)
+- `size`: "1" to "9" (default: "3")
+- `variant`: "solid" | "soft" (default: "soft")
+- `color_scheme`: "tomato" | "red" | "blue" | "green" | etc.
+- `high_contrast`: bool - Increases color contrast
+- `radius`: "none" | "small" | "medium" | "large" | "full"
+
+**Best Practices**:
+```python
+# Avatar with image
+rx.avatar(src="https://example.com/avatar.jpg", fallback="JD")
+
+# Avatar with fallback only (initials)
+rx.avatar(fallback="RU", size="5", color_scheme="blue")
+
+# Profile card example
+rx.hstack(
+    rx.avatar(src=user.avatar_url, fallback=user.initials, size="6"),
+    rx.vstack(
+        rx.text(user.full_name, weight="bold", size="4"),
+        rx.text(f"@{user.username}", color_scheme="gray", size="2"),
+        align="start",
+        spacing="1"
+    ),
+    spacing="3"
+)
+```
+
+### Badge Component (`rx.badge`)
+
+**Purpose**: Highlight items with a small label
+
+**Key Properties**:
+- `variant`: "solid" | "soft" | "surface" | "outline"
+- `color_scheme`: Theme colors
+- `size`: "1" | "2" | "3"
+- `radius`: Border radius preset
+- `high_contrast`: bool
+
+**Best Practices**:
+```python
+# Status badges
+rx.badge("Active", color_scheme="green", variant="solid")
+rx.badge("Pending", color_scheme="yellow", variant="soft")
+rx.badge("Error", color_scheme="red", variant="outline")
+
+# With icons
+rx.badge(
+    rx.icon("check-circle"),
+    "Verified",
+    color_scheme="blue"
+)
+```
+
+### Callout Component (`rx.callout`)
+
+**Purpose**: Display important information or alerts
+
+**Key Properties**:
+- `icon`: Icon component or boolean
+- `color_scheme`: Theme colors
+- `variant`: "soft" | "surface" | "outline"
+- `size`: "1" | "2" | "3"
+
+**Best Practices**:
+```python
+# Info callout
+rx.callout.root(
+    rx.callout.icon(rx.icon("info")),
+    rx.callout.text("This is important information for the user."),
+    color_scheme="blue"
+)
+
+# Warning callout
+rx.callout.root(
+    rx.callout.icon(rx.icon("alert-triangle")),
+    rx.callout.text("Please review this before proceeding."),
+    color_scheme="yellow"
+)
+```
+
+### Code Block Component (`rx.code_block`)
+
+**Purpose**: Display formatted code with syntax highlighting
+
+**Key Properties**:
+- `language`: Programming language for syntax highlighting
+- `theme`: Color theme for the code block
+- `show_line_numbers`: bool
+- `can_copy`: bool - Enable copy button
+
+**Best Practices**:
+```python
+# Python code block
+rx.code_block(
+    """
+def greet(name):
+    return f"Hello, {name}!"
+    """,
+    language="python",
+    show_line_numbers=True,
+    can_copy=True
+)
+
+# With state variable
+rx.code_block(
+    CodeState.code_content,
+    language=CodeState.selected_language,
+    theme="dracula"
+)
+```
+
+### Data List Component (`rx.data_list`)
+
+**Purpose**: Display key-value pairs in a structured format
+
+**Structure**:
+- `rx.data_list.root`: Container
+- `rx.data_list.item`: Individual key-value pair
+- `rx.data_list.label`: Key/label
+- `rx.data_list.value`: Value
+
+**Best Practices**:
+```python
+rx.data_list.root(
+    rx.data_list.item(
+        rx.data_list.label("Name"),
+        rx.data_list.value("John Doe")
+    ),
+    rx.data_list.item(
+        rx.data_list.label("Email"),
+        rx.data_list.value("john@example.com")
+    ),
+    rx.data_list.item(
+        rx.data_list.label("Status"),
+        rx.data_list.value(
+            rx.badge("Active", color_scheme="green")
+        )
+    )
+)
+```
+
+### Icon Component (`rx.icon`)
+
+**Purpose**: Display vector icons from popular icon libraries
+
+**Key Properties**:
+- First argument: Icon name (kebab-case from Lucide icons)
+- `size`: Size in pixels or preset
+- `color`: Icon color
+
+**Best Practices**:
+```python
+# Basic icons
+rx.icon("home")
+rx.icon("user", size=24)
+rx.icon("search", color="blue")
+
+# In buttons
+rx.button(
+    rx.icon("plus"),
+    "Add Item",
+    on_click=State.add_item
+)
+
+# Icon-only buttons
+rx.icon_button(
+    rx.icon("settings"),
+    variant="ghost"
+)
+```
+
+### Progress Component (`rx.progress`)
+
+**Purpose**: Show completion progress
+
+**Key Properties**:
+- `value`: Current progress value (0-100)
+- `max`: Maximum value (default: 100)
+- `size`: "1" | "2" | "3"
+- `variant`: "classic" | "soft" | "surface"
+- `color_scheme`: Theme colors
+
+**Best Practices**:
+```python
+# Determinate progress
+rx.progress(value=State.upload_progress, max=100)
+
+# With label
+rx.vstack(
+    rx.text(f"Progress: {State.progress}%"),
+    rx.progress(value=State.progress),
+    width="100%"
+)
+
+# Indeterminate (loading)
+rx.progress(value=None)  # Shows animation
+```
+
+### Spinner Component (`rx.spinner`)
+
+**Purpose**: Indicate loading state
+
+**Key Properties**:
+- `size`: "1" | "2" | "3"
+- `loading`: bool - Control visibility
+
+**Best Practices**:
+```python
+# Basic spinner
+rx.spinner()
+
+# Conditional loading
+rx.cond(
+    State.is_loading,
+    rx.spinner(size="3"),
+    rx.text("Content loaded!")
+)
+
+# In buttons
+rx.button(
+    rx.cond(
+        State.is_saving,
+        rx.spinner(size="1"),
+        "Save"
+    ),
+    loading=State.is_saving
+)
+```
+
+### Scroll Area Component (`rx.scroll_area`)
+
+**Purpose**: Create scrollable content areas
+
+**Key Properties**:
+- `type`: "auto" | "always" | "scroll" | "hover"
+- `scrollbars`: "vertical" | "horizontal" | "both"
+- `size`: "1" | "2" | "3"
+
+**Best Practices**:
+```python
+# Vertical scroll area
+rx.scroll_area(
+    rx.vstack(
+        *[rx.text(f"Item {i}") for i in range(50)],
+        spacing="2"
+    ),
+    type="auto",
+    scrollbars="vertical",
+    style={"height": "300px"}
+)
+
+# Horizontal scroll
+rx.scroll_area(
+    rx.hstack(
+        *[rx.card(f"Card {i}") for i in range(20)],
+        spacing="3"
+    ),
+    type="hover",
+    scrollbars="horizontal"
+)
+```
+
+## Common Patterns
+
+### User Profile Display
+```python
+def user_profile(user):
+    return rx.card(
+        rx.hstack(
+            rx.avatar(
+                src=user.avatar,
+                fallback=user.initials,
+                size="8"
+            ),
+            rx.vstack(
+                rx.heading(user.name, size="6"),
+                rx.text(user.email, color_scheme="gray"),
+                rx.badge(user.status, color_scheme=user.status_color),
+                align="start",
+                spacing="1"
+            ),
+            align="center",
+            spacing="4"
+        )
+    )
+```
+
+### Loading States
+```python
+rx.cond(
+    State.is_loading,
+    rx.center(
+        rx.vstack(
+            rx.spinner(size="3"),
+            rx.text("Loading data..."),
+            spacing="3"
+        )
+    ),
+    rx.scroll_area(
+        # Content here
+        State.render_content()
+    )
+)
+```
+
+### Information Cards
+```python
+rx.card(
+    rx.callout.root(
+        rx.callout.icon(rx.icon("info")),
+        rx.callout.text("Important notification"),
+        color_scheme="blue"
+    ),
+    rx.data_list.root(
+        rx.data_list.item(
+            rx.data_list.label("Created"),
+            rx.data_list.value(
+                rx.moment(State.created_at, from_now=True)
+            )
+        ),
+        rx.data_list.item(
+            rx.data_list.label("Status"),
+            rx.data_list.value(
+                rx.badge(State.status, color_scheme="green")
+            )
+        )
+    )
+)
+```
+
+## Styling Best Practices
+
+1. **Consistent Sizing**: Use the same size scale across related components
+2. **Color Schemes**: Leverage semantic colors (green for success, red for errors, etc.)
+3. **High Contrast**: Enable for accessibility when needed
+4. **Spacing**: Use proper spacing between data display elements
+5. **Responsive Design**: Ensure components adapt to different screen sizes
+
+## Accessibility
+
+- Always provide `fallback` text for avatars
+- Use semantic color schemes (don't rely on color alone)
+- Include descriptive labels in data lists
+- Provide loading indicators for async operations
+- Ensure sufficient contrast ratios
+
+## Performance Tips
+
+- Lazy load avatar images when displaying many users
+- Use `rx.scroll_area` for long lists instead of rendering everything
+- Cache computed values for progress calculations
+- Minimize re-renders by using cached vars for data transformations

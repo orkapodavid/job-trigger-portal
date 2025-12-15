@@ -1,0 +1,641 @@
+---
+description: Expert guidance for Reflex Var system - reactive variables, type system, operations, and ImportVar
+globs: ["**/*.py"]
+---
+
+# You are an expert in Reflex Var system and reactive programming
+
+## Core Principles
+
+- Vars represent JavaScript expressions that are reactive
+- State fields are automatically converted to Vars
+- Vars support type-safe operations (arithmetic, comparisons, etc.)
+- ImportVar manages JavaScript imports for custom functionality
+- Var system enables Python-to-JavaScript conversion
+
+## Var Class (reflex.vars.base.Var)
+
+Base class for all reactive variables in Reflex.
+
+### Var Types
+
+**NumberVar**: JavaScript number expressions
+```python
+import reflex as rx
+
+class State(rx.State):
+    count: int = 0
+    price: float = 9.99
+    
+    @rx.var
+    def total(self) -> float:
+        """Computed number var"""
+        return self.price * self.count
+    
+    @rx.var
+    def discounted_price(self) -> float:
+        """Number operations"""
+        return self.price * 0.9
+
+# Arithmetic operations
+rx.text(State.count + 10)
+rx.text(State.price * 2)
+rx.text(State.total - 5)
+rx.text(State.count / 2)
+```
+
+**StringVar**: String expressions
+```python
+class State(rx.State):
+    first_name: str = "John"
+    last_name: str = "Doe"
+    
+    @rx.var
+    def full_name(self) -> str:
+        """String concatenation"""
+        return f"{self.first_name} {self.last_name}"
+    
+    @rx.var
+    def greeting(self) -> str:
+        """String operations"""
+        return f"Hello, {self.full_name}!"
+
+# String operations
+rx.text(State.first_name + " " + State.last_name)
+rx.text(State.greeting.upper())
+rx.text(State.greeting.lower())
+```
+
+**BooleanVar**: Boolean expressions
+```python
+class State(rx.State):
+    count: int = 0
+    is_active: bool = True
+    threshold: int = 50
+    
+    @rx.var
+    def is_valid(self) -> bool:
+        """Boolean expression"""
+        return self.count > 0 and self.is_active
+    
+    @rx.var
+    def meets_threshold(self) -> bool:
+        """Comparison operations"""
+        return self.count >= self.threshold
+
+# Boolean operations
+rx.cond(State.is_valid, rx.text("Valid"), rx.text("Invalid"))
+rx.cond(State.count > 10, ...)
+```
+
+**ArrayVar**: Array/list expressions
+```python
+class State(rx.State):
+    items: list[str] = ["a", "b", "c"]
+    numbers: list[int] = [1, 2, 3, 4, 5]
+    
+    @rx.var
+    def item_count(self) -> int:
+        """Array length"""
+        return len(self.items)
+    
+    @rx.var
+    def sorted_numbers(self) -> list[int]:
+        """Array operations"""
+        return sorted(self.numbers)
+
+# Array operations
+rx.foreach(State.items, lambda item: rx.text(item))
+rx.text(State.items.length())
+rx.text(State.numbers[0])  # First element
+```
+
+**ObjectVar**: Object/dict expressions
+```python
+class State(rx.State):
+    user: dict = {"name": "John", "age": 30}
+    config: dict = {"theme": "dark", "lang": "en"}
+    
+    @rx.var
+    def user_name(self) -> str:
+        """Access object property"""
+        return self.user["name"]
+
+# Object operations
+rx.text(State.user["name"])
+rx.text(State.config["theme"])
+```
+
+**NoneVar**: Null/undefined values
+```python
+class State(rx.State):
+    optional_value: str | None = None
+    
+    @rx.var
+    def has_value(self) -> bool:
+        """Check for None"""
+        return self.optional_value is not None
+
+# None checks
+rx.cond(State.optional_value.is_none(), rx.text("No value"), rx.text(State.optional_value))
+rx.cond(State.optional_value.is_not_none(), ...)
+```
+
+### Creating Vars
+
+**From Python Values**
+```python
+# Automatic conversion
+var_from_int = rx.Var.create(42)  # NumberVar
+var_from_str = rx.Var.create("hello")  # StringVar
+var_from_bool = rx.Var.create(True)  # BooleanVar
+var_from_list = rx.Var.create([1, 2, 3])  # ArrayVar
+var_from_dict = rx.Var.create({"key": "value"})  # ObjectVar
+```
+
+**From JavaScript Expressions**
+```python
+# Direct JavaScript
+js_var = rx.Var("Math.random()").guess_type()
+js_var_typed = rx.Var("Date.now()", _var_type=int)
+
+# With type inference
+window_width = rx.Var("window.innerWidth").to(int)
+```
+
+### Var Operations
+
+**Type Conversion**
+```python
+class State(rx.State):
+    count: int = 42
+    
+    @rx.var
+    def count_string(self) -> str:
+        """Convert to string"""
+        return State.count.to_string()
+    
+    @rx.var
+    def as_boolean(self) -> bool:
+        """Convert to boolean"""
+        return State.count.bool()
+
+# Type conversion methods
+rx.text(State.count.to_string())
+rx.text(State.count.to(str))
+rx.cond(State.count.bool(), ...)
+```
+
+**Type Checking**
+```python
+class State(rx.State):
+    value: any = None
+    
+    @rx.var
+    def value_type(self) -> str:
+        """Get JavaScript type"""
+        return self.value.js_type()
+
+# JavaScript typeof
+rx.text(State.value.js_type())  # "number", "string", etc.
+```
+
+**Comparisons**
+```python
+class State(rx.State):
+    count: int = 0
+    threshold: int = 10
+    
+    # Comparison operations return BooleanVar
+    @rx.var
+    def is_below_threshold(self) -> bool:
+        return self.count < self.threshold
+    
+    @rx.var
+    def is_at_threshold(self) -> bool:
+        return self.count == self.threshold
+
+# Usage in components
+rx.cond(State.count > 5, rx.text("High"), rx.text("Low"))
+rx.cond(State.count >= State.threshold, ...)
+rx.cond(State.count == 0, ...)
+rx.cond(State.count != 0, ...)
+```
+
+**Equality Checks**
+```python
+var1 = rx.Var.create(42)
+var2 = rx.Var.create(42)
+
+# Check if vars are equal
+are_equal = var1.equals(var2)  # True
+```
+
+**None Checks**
+```python
+class State(rx.State):
+    optional: str | None = None
+    
+    @rx.var
+    def has_value(self) -> bool:
+        return self.optional.is_not_none()
+
+# None checking
+rx.cond(State.optional.is_none(), rx.text("Empty"))
+rx.cond(State.optional.is_not_none(), rx.text(State.optional))
+```
+
+### Advanced Var Operations
+
+**Custom JavaScript Expressions**
+```python
+from reflex.vars import Var
+
+# Custom JS expression
+custom_var = Var.create(
+    _var_name="customFunction()",
+    _var_type=str,
+    _var_data=None,
+)
+
+# Complex operations
+def multiply_array_values(array_var: Var) -> Var:
+    """Multiply all array values"""
+    js_expr = f"{array_var._var_name}.reduce((a, b) => a * b, 1)"
+    return Var(js_expr, _var_type=int).guess_type()
+```
+
+**Range Generation**
+```python
+# Create range of numbers
+number_range = rx.Var.range(0, 10)  # [0, 1, 2, ..., 9]
+number_range_step = rx.Var.range(0, 10, 2)  # [0, 2, 4, 6, 8]
+
+# Usage
+rx.foreach(
+    rx.Var.range(1, 6),
+    lambda i: rx.text(f"Item {i}")
+)
+```
+
+**Conditional Expressions**
+```python
+class State(rx.State):
+    count: int = 0
+    
+    @rx.var
+    def status(self) -> str:
+        """Multi-condition expression"""
+        return rx.cond(
+            self.count == 0,
+            "Empty",
+            rx.cond(
+                self.count < 10,
+                "Low",
+                rx.cond(
+                    self.count < 50,
+                    "Medium",
+                    "High"
+                )
+            )
+        )
+```
+
+## ImportVar (reflex.utils.imports.ImportVar)
+
+Manages JavaScript imports for components and custom code.
+
+### ImportVar Structure
+
+```python
+class ImportVar:
+    tag: str | None                # Import name
+    is_default: bool = False      # Default vs named import
+    alias: str | None = None      # Import alias
+    install: bool = True          # Whether to install package
+    render: bool = True           # Whether to render import
+    package_path: str = "/"       # Package path
+```
+
+### Creating ImportVars
+
+**Named Imports**
+```python
+# Import specific functions
+use_state = rx.ImportVar(
+    tag="useState",
+    is_default=False,
+    package_path="react",
+)
+
+use_effect = rx.ImportVar(
+    tag="useEffect",
+    is_default=False,
+    package_path="react",
+)
+
+# Generates: import { useState, useEffect } from 'react'
+```
+
+**Default Imports**
+```python
+# Import default export
+react_icons = rx.ImportVar(
+    tag="FaHeart",
+    is_default=True,
+    package_path="react-icons/fa",
+)
+
+# Generates: import FaHeart from 'react-icons/fa'
+```
+
+**Aliased Imports**
+```python
+# Import with alias
+moment = rx.ImportVar(
+    tag="moment",
+    alias="momentjs",
+    package_path="moment",
+)
+
+# Generates: import moment as momentjs from 'moment'
+```
+
+**Custom Paths**
+```python
+# Import from relative path
+custom_util = rx.ImportVar(
+    tag="customFunction",
+    package_path="./utils/custom",
+    install=False,  # Don't try to install
+)
+
+# Generates: import { customFunction } from './utils/custom'
+```
+
+### Using ImportVars in Components
+
+```python
+class CustomComponent(rx.Component):
+    
+    def add_imports(self) -> dict[str, str] | list[dict[str, str]]:
+        """Add imports for component"""
+        return [
+            # React imports
+            {"react": "useState, useEffect"},
+            # External library
+            {"react-icons/ai": "AiOutlineHeart"},
+            # Custom import
+            {"./custom": "customFunction"},
+        ]
+```
+
+### Import Patterns
+
+**Conditional Imports**
+```python
+class ConditionalComponent(rx.Component):
+    use_icons: bool = True
+    
+    def add_imports(self):
+        imports = [{"react": "useState"}]
+        
+        if self.use_icons:
+            imports.append({"react-icons/fa": "FaCheck"})
+        
+        return imports
+```
+
+**Dynamic Import Paths**
+```python
+class DynamicComponent(rx.Component):
+    icon_library: str = "fa"
+    
+    def add_imports(self):
+        icon_path = f"react-icons/{self.icon_library}"
+        return [{icon_path: "FaIcon"}]
+```
+
+## Best Practices
+
+### Type Safety
+
+```python
+from typing import Literal
+
+class State(rx.State):
+    # Use type hints for better type inference
+    count: int = 0
+    text: str = ""
+    is_active: bool = False
+    items: list[str] = []
+    config: dict[str, str] = {}
+    
+    # Type-safe computed vars
+    @rx.var
+    def typed_result(self) -> int:
+        """Explicit return type"""
+        return self.count * 2
+    
+    # Literal types for constants
+    theme: Literal["light", "dark"] = "light"
+```
+
+### Var Composition
+
+```python
+class State(rx.State):
+    first: str = "Hello"
+    second: str = "World"
+    count: int = 5
+    
+    @rx.var
+    def composed(self) -> str:
+        """Compose multiple vars"""
+        return f"{self.first} {self.second} x{self.count}"
+    
+    @rx.var
+    def chained(self) -> str:
+        """Chain operations"""
+        return self.composed.upper()
+```
+
+### Performance Optimization
+
+```python
+class State(rx.State):
+    items: list[dict] = []
+    
+    # Cache expensive computations
+    @rx.var(cache=True)
+    def filtered_items(self) -> list[dict]:
+        """Cached - only recalculates when items change"""
+        return [item for item in self.items if item["active"]]
+    
+    @rx.var(cache=True)
+    def sorted_items(self) -> list[dict]:
+        """Chain cached vars"""
+        return sorted(self.filtered_items, key=lambda x: x["name"])
+```
+
+## Common Patterns
+
+### Conditional Rendering
+
+```python
+class State(rx.State):
+    count: int = 0
+    
+    @rx.var
+    def display_text(self) -> str:
+        """Conditional text based on count"""
+        return rx.cond(
+            self.count == 0,
+            "No items",
+            rx.cond(
+                self.count == 1,
+                "1 item",
+                f"{self.count} items"
+            )
+        )
+
+# Usage
+rx.text(State.display_text)
+```
+
+### Array Transformations
+
+```python
+class State(rx.State):
+    numbers: list[int] = [1, 2, 3, 4, 5]
+    
+    @rx.var
+    def doubled(self) -> list[int]:
+        """Transform array"""
+        return [n * 2 for n in self.numbers]
+    
+    @rx.var
+    def sum_total(self) -> int:
+        """Reduce array"""
+        return sum(self.numbers)
+
+# Display array
+rx.foreach(
+    State.numbers,
+    lambda n: rx.text(n * 2)  # Transform in render
+)
+```
+
+### Complex Calculations
+
+```python
+class State(rx.State):
+    values: list[int] = [1, 2, 3, 4, 5]
+    
+    @rx.var
+    def factorial(self) -> int:
+        """Complex calculation using JS reduce"""
+        # Create array from range
+        range_var = rx.Var.range(1, self.values.length() + 1)
+        
+        # Multiply all values
+        js_expr = f"{range_var._var_name}.reduce((a, b) => a * b, 1)"
+        return rx.Var(js_expr, _var_type=int)
+```
+
+### Custom JavaScript Operations
+
+```python
+from reflex.vars import Var
+
+def format_currency(amount: Var) -> Var:
+    """Format number as currency"""
+    js_code = f"new Intl.NumberFormat('en-US', {{ style: 'currency', currency: 'USD' }}).format({amount._var_name})"
+    return Var(js_code, _var_type=str)
+
+def format_date(date_var: Var) -> Var:
+    """Format date using JS Date"""
+    js_code = f"new Date({date_var._var_name}).toLocaleDateString()"
+    return Var(js_code, _var_type=str)
+
+class State(rx.State):
+    price: float = 99.99
+    timestamp: int = 1234567890
+    
+    @rx.var
+    def formatted_price(self) -> str:
+        return format_currency(rx.Var.create(self.price))
+    
+    @rx.var
+    def formatted_date(self) -> str:
+        return format_date(rx.Var.create(self.timestamp))
+```
+
+### Reactive Forms
+
+```python
+class FormState(rx.State):
+    email: str = ""
+    password: str = ""
+    confirm_password: str = ""
+    
+    @rx.var
+    def email_valid(self) -> bool:
+        """Email validation"""
+        return "@" in self.email and "." in self.email
+    
+    @rx.var
+    def password_valid(self) -> bool:
+        """Password validation"""
+        return len(self.password) >= 8
+    
+    @rx.var
+    def passwords_match(self) -> bool:
+        """Check password confirmation"""
+        return self.password == self.confirm_password
+    
+    @rx.var
+    def form_valid(self) -> bool:
+        """Overall form validity"""
+        return self.email_valid and self.password_valid and self.passwords_match
+
+# Reactive validation feedback
+rx.cond(
+    FormState.email_valid,
+    rx.text("✓ Valid email", color="green"),
+    rx.text("✗ Invalid email", color="red"),
+)
+```
+
+### Data Transformations
+
+```python
+class DataState(rx.State):
+    raw_data: list[dict] = []
+    search_term: str = ""
+    sort_field: str = "name"
+    
+    @rx.var
+    def filtered_data(self) -> list[dict]:
+        """Filter by search term"""
+        if not self.search_term:
+            return self.raw_data
+        
+        return [
+            item for item in self.raw_data
+            if self.search_term.lower() in str(item).lower()
+        ]
+    
+    @rx.var
+    def sorted_data(self) -> list[dict]:
+        """Sort filtered data"""
+        return sorted(
+            self.filtered_data,
+            key=lambda x: x.get(self.sort_field, "")
+        )
+    
+    @rx.var
+    def data_count(self) -> int:
+        """Count of filtered items"""
+        return len(self.sorted_data)
+```
