@@ -3,10 +3,12 @@ import asyncio
 import logging
 import os
 import pytz
+import httpx
 from sqlmodel import Session, select, desc, create_engine
 from typing import Optional
 from datetime import datetime, timezone
 from app.models import ScheduledJob, JobExecutionLog, get_db_url, init_db
+from app.websocket_server import broadcaster
 
 engine = create_engine(get_db_url())
 SCRIPTS_DIR = os.path.join(os.getcwd(), "app", "scripts")
@@ -49,11 +51,11 @@ def hkt_to_utc_schedule(schedule_type: str, time_str: str, day_val: Optional[int
         h, m = map(int, time_str.split(":"))
         dt_hkt = None
         if schedule_type == "daily":
-            dt_hkt = HKT.localize(datetime(2024, 1, 1, h, m, 0))
+            dt_hkt = datetime(2024, 1, 1, h, m, 0, tzinfo=HKT)
         elif schedule_type == "weekly":
-            dt_hkt = HKT.localize(datetime(2024, 1, 1 + (day_val or 0), h, m, 0))
+            dt_hkt = datetime(2024, 1, 1 + (day_val or 0), h, m, 0, tzinfo=HKT)
         elif schedule_type == "monthly":
-            dt_hkt = HKT.localize(datetime(2024, 1, day_val or 1, h, m, 0))
+            dt_hkt = datetime(2024, 1, day_val or 1, h, m, 0, tzinfo=HKT)
         else:
             return (time_str, day_val)
         dt_utc = dt_hkt.astimezone(timezone.utc)
@@ -77,6 +79,8 @@ class State(rx.State):
 
     jobs: list[dict] = []
     logs: list[JobExecutionLog] = []
+    running_job_ids: list[int] = []
+    processing_job_ids: list[int] = []
     selected_job_id: Optional[int] = None
     selected_job_name: str = ""
     selected_log_entry: Optional[JobExecutionLog] = None
@@ -89,10 +93,50 @@ class State(rx.State):
     new_job_schedule_day: str = "1"
     new_job_schedule_minute: str = "0"
     is_loading: bool = False
+    is_loading_logs: bool = False
     search_query: str = ""
     auto_refresh: bool = True
     log_limit: int = 50
     is_modal_open: bool = False
+    worker_online: bool = False
+    active_workers_count: int = 0
+    last_heartbeat: str = ""
+    worker_uptime: int = 0
+    jobs_processed_count: int = 0
+    worker_id: str = ""
+
+    @rx.var
+    def worker_status(self) -> str:
+        """Computed status based on last heartbeat timestamp."""
+        if not self.last_heartbeat:
+            return "offline"
+        try:
+            last = datetime.fromisoformat(self.last_heartbeat)
+            now = datetime.now(timezone.utc)
+            diff = (now - last).total_seconds()
+            if diff > 180:
+                return "offline"
+            elif diff > 90:
+                return "stale"
+            return "offline"
+        except Exception as e:
+            logging.exception(f"Error calculating worker status: {e}")
+            return "offline"
+
+    @rx.var
+    def worker_uptime_str(self) -> str:
+        """Formatted uptime string."""
+        s = self.worker_uptime
+        if s < 60:
+            return f"{s}s"
+        m = s // 60
+        if m < 60:
+            return f"{m}m"
+        h = m // 60
+        if h < 24:
+            return f"{h}h {m % 60}m"
+        d = h // 24
+        return f"{d}d {h % 24}h"
 
     @rx.event
     def set_modal_open(self, value: bool):
@@ -109,9 +153,12 @@ class State(rx.State):
                 query = query.order_by(ScheduledJob.id)
                 results = session.exec(query).all()
                 self.jobs = []
+                running_ids = []
                 for job in results:
                     job_dict = job.model_dump()
                     schedule_type = job.schedule_type or "interval"
+                    if schedule_type == "manual" and job.next_run:
+                        running_ids.append(job.id)
                     if schedule_type == "interval":
                         seconds = job.interval_seconds
                         if seconds >= 86400 and seconds % 86400 == 0:
@@ -160,9 +207,12 @@ class State(rx.State):
                         job_dict["formatted_interval"] = (
                             f"Monthly on day {hkt_day} at {hkt_time} (HKT)"
                         )
+                    elif schedule_type == "manual":
+                        job_dict["formatted_interval"] = "Manual (Run on Demand)"
                     else:
                         job_dict["formatted_interval"] = "Unknown Schedule"
                     self.jobs.append(job_dict)
+                self.running_job_ids = running_ids
         except Exception as e:
             logging.exception(f"Error loading jobs: {e}")
 
@@ -170,20 +220,18 @@ class State(rx.State):
     def run_job_now(self, job_id: int):
         """Force a job to run immediately by updating its next_run time."""
         try:
+            if job_id not in self.running_job_ids:
+                self.running_job_ids.append(job_id)
             with Session(engine) as session:
                 job = session.get(ScheduledJob, job_id)
                 if job:
-                    if not job.is_active:
-                        return rx.toast.error(
-                            "Cannot run inactive job. Please activate it first."
-                        )
                     job.next_run = datetime.now(timezone.utc)
                     session.add(job)
                     session.commit()
+                    self.load_jobs()
                     return rx.toast.info(
                         f"Queued '{job.name}' for immediate execution."
                     )
-            self.load_jobs()
         except Exception as e:
             logging.exception(f"Error running job {job_id}: {e}")
             return rx.toast.error(f"Failed to run job: {e}")
@@ -236,10 +284,13 @@ class State(rx.State):
                 schedule_time, schedule_day = hkt_to_utc_schedule(
                     "monthly", self.new_job_schedule_time, day_val
                 )
+            elif schedule_type == "manual":
+                pass
         except ValueError as e:
             logging.exception(f"Invalid schedule configuration: {e}")
             return rx.window_alert(f"Invalid configuration: {e}")
         try:
+            next_run = None if schedule_type == "manual" else datetime.now(timezone.utc)
             with Session(engine) as session:
                 new_job = ScheduledJob(
                     name=self.new_job_name,
@@ -249,7 +300,7 @@ class State(rx.State):
                     schedule_time=schedule_time,
                     schedule_day=schedule_day,
                     is_active=True,
-                    next_run=datetime.now(timezone.utc),
+                    next_run=next_run,
                 )
                 session.add(new_job)
                 session.commit()
@@ -308,14 +359,26 @@ class State(rx.State):
             logging.exception(f"Error deleting job {job_id}: {e}")
 
     @rx.event
-    def select_job(self, job_id: int):
+    async def select_job(self, job_id: int):
         """Select a job to view its logs."""
         self.selected_job_id = job_id
         job = next((j for j in self.jobs if j["id"] == job_id), None)
         if job:
             self.selected_job_name = job["name"]
         self.selected_log_entry = None
+        self.is_loading_logs = True
+        yield
         self.load_logs()
+        self.is_loading_logs = False
+
+    @rx.event
+    async def refresh_logs(self):
+        """Explicitly refresh the logs for the selected job."""
+        if self.selected_job_id:
+            self.is_loading_logs = True
+            yield
+            self.load_logs()
+            self.is_loading_logs = False
 
     @rx.event
     def select_log(self, log_id: int):
@@ -348,18 +411,90 @@ class State(rx.State):
         self.load_jobs()
 
     @rx.event(background=True)
+    async def fetch_worker_status(self):
+        """Poll the internal API for status (manual trigger)."""
+        worker_data = {}
+        try:
+            async with httpx.AsyncClient() as client:
+                res = await client.get(
+                    "http://localhost:8000/api/worker-status", timeout=2.0
+                )
+                if res.status_code == 200:
+                    worker_data = res.json()
+        except Exception as e:
+            logging.exception(f"Error fetching worker status: {e}")
+        async with self:
+            self._update_worker_state_from_data(worker_data)
+
+    def _update_worker_state_from_data(self, data: dict):
+        """Helper to update state variables from raw heartbeat data."""
+        self.active_workers_count = len(data) if data else 0
+        if not data:
+            self.worker_online = False
+            return
+        best_worker = None
+        max_uptime = -1
+        for wid, wdata in data.items():
+            try:
+                uptime = wdata.get("uptime_seconds", 0)
+                if uptime >= max_uptime:
+                    max_uptime = uptime
+                    best_worker = wdata
+            except Exception as e:
+                logging.exception(f"Error processing worker data item: {e}")
+                continue
+        if best_worker:
+            self.worker_id = best_worker.get("worker_id", "")
+            self.last_heartbeat = best_worker.get("timestamp", "")
+            self.worker_uptime = best_worker.get("uptime_seconds", 0)
+            self.jobs_processed_count = best_worker.get("jobs_processed", 0)
+            self.worker_online = True
+
+    @rx.event(background=True)
     async def on_load(self):
-        """Initial load and background refresh loop."""
+        """
+        Initial load and background event listener.
+        Subscribes to the global broadcaster to receive real-time updates from the worker.
+        """
         init_db()
         async with self:
             self.load_jobs()
+        yield State.fetch_worker_status
+        queue = await broadcaster.subscribe()
         while True:
-            await asyncio.sleep(5)
+            msg = await queue.get()
             async with self:
-                if self.auto_refresh:
-                    try:
-                        self.load_jobs()
-                        if self.selected_job_id:
-                            self.load_logs()
-                    except Exception as e:
-                        logging.exception(f"Error in background refresh: {e}")
+                msg_type = msg.get("type")
+                if msg_type == "heartbeat":
+                    worker_id = msg.get("worker_id")
+                    if worker_id:
+                        self.worker_id = worker_id
+                        self.last_heartbeat = msg.get("timestamp", "")
+                        self.worker_uptime = msg.get("uptime_seconds", 0)
+                        self.jobs_processed_count = msg.get("jobs_processed", 0)
+                        self.worker_online = True
+                        if self.active_workers_count == 0:
+                            self.active_workers_count = 1
+                elif msg_type == "event":
+                    event_name = msg.get("event")
+                    job_id = msg.get("job_id")
+                    if event_name == "job_started":
+                        if job_id and job_id not in self.processing_job_ids:
+                            self.processing_job_ids.append(job_id)
+                    elif event_name == "job_completed":
+                        if job_id and job_id in self.processing_job_ids:
+                            self.processing_job_ids.remove(job_id)
+                    if event_name in ["job_started", "job_completed"]:
+                        if self.auto_refresh:
+                            self.load_jobs()
+                            if self.selected_job_id:
+                                self.load_logs()
+                            if event_name == "job_completed":
+                                job_name = msg.get("job_name", "Unknown Job")
+                                status = msg.get("status", "FINISHED")
+                                if status == "FAILURE":
+                                    yield rx.toast.error(f"Job '{job_name}' failed!")
+                                else:
+                                    yield rx.toast.success(
+                                        f"Job '{job_name}' completed."
+                                    )
