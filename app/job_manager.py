@@ -116,6 +116,7 @@ def create_job_modal() -> rx.Component:
                         rx.el.option("Daily", value="daily"),
                         rx.el.option("Weekly", value="weekly"),
                         rx.el.option("Monthly", value="monthly"),
+                        rx.el.option("Manual (Run on Demand)", value="manual"),
                         value=State.new_job_schedule_type,
                         on_change=State.set_new_job_schedule_type,
                         class_name="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent",
@@ -258,6 +259,16 @@ def create_job_modal() -> rx.Component:
                                 )
                             ),
                         ),
+                        (
+                            "manual",
+                            rx.el.div(
+                                rx.el.p(
+                                    "This job will only run when manually triggered.",
+                                    class_name="text-sm text-gray-500 italic",
+                                ),
+                                class_name="py-2",
+                            ),
+                        ),
                         rx.el.div(),
                     ),
                     class_name="mb-6 min-h-[80px]",
@@ -285,6 +296,8 @@ def create_job_modal() -> rx.Component:
 
 
 def job_row(job: dict) -> rx.Component:
+    is_queued = State.running_job_ids.contains(job["id"])
+    is_executing = State.processing_job_ids.contains(job["id"])
     return rx.el.tr(
         rx.el.td(
             rx.el.div(
@@ -310,21 +323,71 @@ def job_row(job: dict) -> rx.Component:
             class_name="px-6 py-4 whitespace-nowrap text-sm",
         ),
         rx.el.td(
-            rx.el.span(
+            rx.el.div(
                 rx.cond(
-                    job["next_run"], format_datetime(job["next_run"]), "Not scheduled"
+                    is_executing,
+                    rx.el.span(
+                        rx.el.span(
+                            class_name="w-1.5 h-1.5 rounded-full bg-violet-500 mr-1.5 animate-ping absolute inline-flex opacity-75"
+                        ),
+                        rx.el.span(
+                            class_name="relative inline-flex rounded-full h-1.5 w-1.5 bg-violet-500 mr-1.5"
+                        ),
+                        "Running",
+                        class_name="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-violet-50 text-violet-700 border border-violet-100",
+                    ),
+                    rx.cond(
+                        is_queued,
+                        rx.el.span(
+                            rx.el.span(
+                                class_name="w-1.5 h-1.5 rounded-full bg-blue-500 mr-1.5 animate-pulse"
+                            ),
+                            "Queued",
+                            class_name="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100 animate-pulse",
+                        ),
+                        rx.el.span(
+                            rx.cond(
+                                job["next_run"],
+                                format_datetime(job["next_run"]),
+                                rx.cond(
+                                    job["schedule_type"] == "manual",
+                                    "Manual / Not Scheduled",
+                                    "Not scheduled",
+                                ),
+                            ),
+                            class_name="text-gray-500 font-mono text-xs",
+                        ),
+                    ),
                 ),
-                class_name="text-gray-500 font-mono text-xs",
+                rx.cond(
+                    is_executing,
+                    rx.el.p(
+                        "Executing on worker...",
+                        class_name="text-[10px] text-violet-500 mt-0.5 italic",
+                    ),
+                    rx.cond(
+                        is_queued,
+                        rx.el.p(
+                            "Pending dispatch...",
+                            class_name="text-[10px] text-blue-500 mt-0.5 italic",
+                        ),
+                    ),
+                ),
             ),
             class_name="px-6 py-4 whitespace-nowrap text-sm",
         ),
         rx.el.td(
             rx.el.div(
                 rx.el.button(
-                    rx.icon("circle_play", class_name="h-4 w-4 text-violet-600"),
+                    rx.cond(
+                        is_queued | is_executing,
+                        rx.spinner(size="1", class_name="text-violet-600"),
+                        rx.icon("circle_play", class_name="h-4 w-4 text-violet-600"),
+                    ),
                     on_click=lambda: State.run_job_now(job["id"]),
                     class_name="p-1.5 hover:bg-violet-50 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
                     title="Run Now",
+                    disabled=is_queued | is_executing,
                 ),
                 rx.el.button(
                     rx.cond(
@@ -355,6 +418,106 @@ def job_row(job: dict) -> rx.Component:
     )
 
 
+def worker_status_widget() -> rx.Component:
+    return rx.el.div(
+        rx.el.div(
+            rx.el.div(
+                class_name=rx.match(
+                    State.worker_status,
+                    ("online", "h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"),
+                    ("stale", "h-2.5 w-2.5 rounded-full bg-amber-400"),
+                    ("offline", "h-2.5 w-2.5 rounded-full bg-rose-500"),
+                    "h-2.5 w-2.5 rounded-full bg-slate-300",
+                )
+            ),
+            rx.el.span(
+                rx.match(
+                    State.worker_status,
+                    (
+                        "online",
+                        rx.cond(
+                            State.active_workers_count > 1,
+                            f"System Online ({State.active_workers_count})",
+                            "System Online",
+                        ),
+                    ),
+                    ("stale", "System Stale"),
+                    ("offline", "System Offline"),
+                    "Connecting...",
+                ),
+                class_name="text-xs font-semibold ml-2",
+            ),
+            class_name=rx.match(
+                State.worker_status,
+                (
+                    "online",
+                    "flex items-center px-3 py-1.5 rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm transition-all",
+                ),
+                (
+                    "stale",
+                    "flex items-center px-3 py-1.5 rounded-full border border-amber-200 bg-amber-50 text-amber-700 shadow-sm transition-all",
+                ),
+                (
+                    "offline",
+                    "flex items-center px-3 py-1.5 rounded-full border border-rose-200 bg-rose-50 text-rose-700 shadow-sm transition-all",
+                ),
+                "flex items-center px-3 py-1.5 rounded-full border border-slate-200 bg-slate-50 text-slate-600 shadow-sm transition-all",
+            ),
+        ),
+        rx.el.div(
+            rx.el.div(
+                rx.el.div(
+                    rx.el.p(
+                        "Worker ID",
+                        class_name="text-[10px] uppercase text-gray-400 font-bold tracking-wider mb-0.5",
+                    ),
+                    rx.el.p(
+                        State.worker_id,
+                        class_name="text-xs font-mono text-gray-700 truncate",
+                    ),
+                    class_name="mb-3",
+                ),
+                rx.el.div(
+                    rx.el.p(
+                        "Uptime",
+                        class_name="text-[10px] uppercase text-gray-400 font-bold tracking-wider mb-0.5",
+                    ),
+                    rx.el.p(
+                        State.worker_uptime_str,
+                        class_name="text-xs font-medium text-gray-700",
+                    ),
+                    class_name="mb-3",
+                ),
+                rx.el.div(
+                    rx.el.p(
+                        "Last Heartbeat",
+                        class_name="text-[10px] uppercase text-gray-400 font-bold tracking-wider mb-0.5",
+                    ),
+                    rx.moment(
+                        State.last_heartbeat,
+                        from_now=True,
+                        class_name="text-xs font-medium text-gray-700",
+                    ),
+                    class_name="mb-3",
+                ),
+                rx.el.div(
+                    rx.el.p(
+                        "Processed Jobs",
+                        class_name="text-[10px] uppercase text-gray-400 font-bold tracking-wider mb-0.5",
+                    ),
+                    rx.el.p(
+                        State.jobs_processed_count,
+                        class_name="text-xs font-medium text-gray-700",
+                    ),
+                ),
+                class_name="p-4 bg-white border border-gray-100 shadow-xl rounded-xl w-56 backdrop-blur-sm",
+            ),
+            class_name="absolute top-full right-0 mt-2 opacity-0 group-hover:opacity-100 transition-all duration-200 transform origin-top-right scale-95 group-hover:scale-100 z-50 pointer-events-none group-hover:pointer-events-auto",
+        ),
+        class_name="relative group cursor-help z-20",
+    )
+
+
 def jobs_table() -> rx.Component:
     return rx.el.div(
         rx.el.div(
@@ -376,6 +539,7 @@ def jobs_table() -> rx.Component:
                 class_name="flex flex-col",
             ),
             rx.el.div(
+                worker_status_widget(),
                 rx.el.div(
                     rx.icon(
                         "search",
@@ -545,16 +709,34 @@ def execution_logs_panel() -> rx.Component:
     return rx.el.div(
         rx.el.div(
             rx.el.div(
-                rx.icon("activity", class_name="h-5 w-5 text-violet-600 mr-2"),
-                rx.el.h2(
-                    rx.cond(
-                        State.selected_job_name,
-                        State.selected_job_name,
-                        "Execution Logs",
+                rx.el.div(
+                    rx.icon("activity", class_name="h-5 w-5 text-violet-600 mr-2"),
+                    rx.el.h2(
+                        rx.cond(
+                            State.selected_job_name,
+                            State.selected_job_name,
+                            "Execution Logs",
+                        ),
+                        class_name="text-lg font-semibold text-gray-900 truncate",
                     ),
-                    class_name="text-lg font-semibold text-gray-900 truncate",
+                    class_name="flex items-center",
                 ),
-                class_name="flex items-center",
+                rx.cond(
+                    State.selected_job_id,
+                    rx.el.button(
+                        rx.icon(
+                            "refresh-cw",
+                            class_name=rx.cond(
+                                State.is_loading_logs, "h-4 w-4 animate-spin", "h-4 w-4"
+                            ),
+                        ),
+                        on_click=State.refresh_logs,
+                        disabled=State.is_loading_logs,
+                        class_name="p-1.5 text-gray-500 hover:text-violet-600 hover:bg-violet-50 rounded-md transition-colors",
+                        title="Refresh Logs",
+                    ),
+                ),
+                class_name="flex items-center justify-between",
             ),
             rx.el.p(
                 rx.cond(
@@ -570,35 +752,52 @@ def execution_logs_panel() -> rx.Component:
             State.selected_job_id,
             rx.el.div(
                 rx.cond(
-                    State.logs,
+                    State.is_loading_logs,
                     rx.el.div(
                         rx.el.div(
-                            rx.el.h3(
-                                "Recent Executions",
-                                class_name="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3",
-                            ),
-                            rx.el.div(
-                                rx.foreach(State.logs, log_item),
-                                class_name="space-y-2 overflow-y-auto custom-scrollbar pr-1 max-h-[calc(100vh-350px)]",
-                            ),
-                            class_name="flex flex-col flex-1 min-h-0",
+                            class_name="h-12 w-full bg-gray-100 rounded-lg animate-pulse mb-2"
                         ),
-                        rx.cond(State.selected_log_entry, log_detail_view()),
-                        class_name="flex flex-col gap-6 h-full",
-                    ),
-                    rx.el.div(
                         rx.el.div(
-                            rx.icon("clock", class_name="h-10 w-10 text-gray-200 mb-3"),
-                            rx.el.p(
-                                "No execution history yet.",
-                                class_name="text-sm text-gray-600 font-medium",
+                            class_name="h-12 w-full bg-gray-100 rounded-lg animate-pulse mb-2"
+                        ),
+                        rx.el.div(
+                            class_name="h-12 w-full bg-gray-100 rounded-lg animate-pulse mb-2"
+                        ),
+                        class_name="flex flex-col w-full",
+                    ),
+                    rx.cond(
+                        State.logs,
+                        rx.el.div(
+                            rx.el.div(
+                                rx.el.h3(
+                                    "Recent Executions",
+                                    class_name="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3",
+                                ),
+                                rx.el.div(
+                                    rx.foreach(State.logs, log_item),
+                                    class_name="space-y-2 overflow-y-auto custom-scrollbar pr-1 max-h-[calc(100vh-350px)]",
+                                ),
+                                class_name="flex flex-col flex-1 min-h-0",
                             ),
-                            rx.el.p(
-                                "Run the job to generate logs.",
-                                class_name="text-xs text-gray-400 mt-1",
-                            ),
-                            class_name="flex flex-col items-center justify-center py-16 bg-gray-50/50 rounded-xl border border-dashed border-gray-200",
-                        )
+                            rx.cond(State.selected_log_entry, log_detail_view()),
+                            class_name="flex flex-col gap-6 h-full",
+                        ),
+                        rx.el.div(
+                            rx.el.div(
+                                rx.icon(
+                                    "clock", class_name="h-10 w-10 text-gray-200 mb-3"
+                                ),
+                                rx.el.p(
+                                    "No execution history yet.",
+                                    class_name="text-sm text-gray-600 font-medium",
+                                ),
+                                rx.el.p(
+                                    "Run the job to generate logs.",
+                                    class_name="text-xs text-gray-400 mt-1",
+                                ),
+                                class_name="flex flex-col items-center justify-center py-16 bg-gray-50/50 rounded-xl border border-dashed border-gray-200",
+                            )
+                        ),
                     ),
                 ),
                 class_name="flex flex-col h-full overflow-hidden",
