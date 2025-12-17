@@ -7,3 +7,5 @@ sqlmodel
 reflex
 python-dateutil
 PyGithub
+
+reflex==0.8.22

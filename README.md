@@ -1,6 +1,6 @@
 # Job Trigger Management Portal
 
-A robust, enterprise-grade job scheduling system built with **Reflex**, featuring a real-time WebSocket architecture for instant job dispatch and monitoring.
+A robust, enterprise-grade job scheduling system built with **Reflex**, featuring a **database-driven architecture** for reliable job dispatch and execution.
 
 ![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
 ![Reflex](https://img.shields.io/badge/reflex-framework-purple.svg)
@@ -8,37 +8,62 @@ A robust, enterprise-grade job scheduling system built with **Reflex**, featurin
 
 ## 🏗️ Architecture Overview
 
-The system uses a push-based architecture to eliminate database polling lag and simplify worker deployment:
+The system uses a database-driven coordination model with three independent components:
 
-
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         REFLEX APP (SCHEDULER)                          │
-│  ┌──────────────┐    ┌───────────────┐    ┌──────────────────────────┐  │
-│  │   Database   │◄──►│ Scheduler Job │◄──►│   WebSocket Handler      │  │
-│  │  (SQLite)    │    │ (Background)  │    │   /ws/heartbeat          │  │
-│  └──────────────┘    └───────────────┘    └────────────┬─────────────┘  │
-└───────────────────────────────────────────────────────│─────────────────┘
-                                                         │ WebSocket
-                                                         │ (bidirectional)
-┌───────────────────────────────────────────────────────│─────────────────┐
-│                         WORKER (EXECUTOR)              ▼                │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │  Connects to WS → Receives job commands → Executes → Reports     │   │
-│  └──────────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────┘
+```
+┌─────────────────────────────────────────────────────────────┐
+│                         DATABASE                            │
+│  ┌────────────────┐  ┌────────────────┐  ┌───────────────┐ │
+│  │  ScheduledJob  │  │  JobDispatch   │  │ WorkerReg     │ │
+│  │                │  │                │  │               │ │
+│  │ - next_run     │  │ - status       │  │ - heartbeat   │ │
+│  │ - lock_until   │  │ - worker_id    │  │ - status      │ │
+│  └────────────────┘  └────────────────┘  └───────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+         ▲  │                    ▲  │                  ▲  │
+         │  │                    │  │                  │  │
+         │  ▼                    │  ▼                  │  ▼
+    ┌────────────┐          ┌────────────┐      ┌────────────┐
+    │ SCHEDULER  │          │  WORKER 1  │      │  WORKER 2  │
+    │  SERVICE   │          │  SERVICE   │      │  SERVICE   │
+    │            │          │            │      │            │
+    │ - Poll DB  │          │ - Claim    │      │ - Claim    │
+    │ - Dispatch │          │ - Execute  │      │ - Execute  │
+    │ - Monitor  │          │ - Report   │      │ - Report   │
+    └────────────┘          └────────────┘      └────────────┘
+         │
+         │ (Read-only)
+         ▼
+    ┌────────────┐
+    │ WEB PORTAL │
+    │  (Reflex)  │
+    │            │
+    │ - Display  │
+    │ - Configure│
+    │ - Logs     │
+    └────────────┘
+```
 
 
 ### Components
 
-1. **Reflex Web App (`app/app.py` & `app/scheduler.py`)**:
-   - **Scheduler**: Runs a background loop checking the DB for due jobs.
-   - **WebSocket Server**: Manages connections to workers and broadcasts real-time events.
-   - **UI**: Displays live status and logs.
+1. **Scheduler Service (`services/scheduler_service.py`)**:
+   - **Independent Process**: Runs as standalone service
+   - **Job Discovery**: Polls database for due jobs every 10 seconds
+   - **Dispatch Creation**: Creates JobDispatch records for workers
+   - **Monitoring**: Detects stuck jobs, cleans up stale workers
 
-2. **Worker Service (`app/worker.py`)**:
-   - **Stateless**: Connects via WebSocket to receive instructions.
-   - **Secure**: Only executes allowed scripts.
-   - **Real-time**: Pushes heartbeats and execution logs instantly.
+2. **Worker Service (`services/worker_service.py`)**:
+   - **Independent Process**: Runs as standalone service (horizontally scalable)
+   - **Job Claiming**: Polls for PENDING dispatches using optimistic locking
+   - **Execution**: Runs scripts and captures output
+   - **Reporting**: Updates JobDispatch and creates execution logs
+
+3. **Reflex Web Portal (`app/app.py`)**:
+   - **UI**: Real-time dashboard displaying job status
+   - **Management**: Create, edit, and configure scheduled jobs
+   - **Monitoring**: View execution logs and worker status
+   - **Read-Only**: Displays data from database (no direct service interaction)
 
 ## 🚀 Quick Start
 
@@ -62,47 +87,56 @@ $env:REFLEX_DB_URL = "sqlite:///reflex.db"
 
 
 ### 3. Running the System
-You need **2 separate terminal windows**:
+You need **3 separate terminal windows**:
 
-**Terminal 1: Web Application** (Must start first)
-bash
-reflex run
-
+**Terminal 1: Scheduler Service** (Must start first)
+```bash
+python -m services.scheduler_service
+```
 
 **Terminal 2: Worker Service**
-bash
-python -m app.worker
+```bash
+python -m services.worker_service
+```
 
+**Terminal 3: Web Portal** (Optional - for UI)
+```bash
+reflex run
+```
 
-*You should see "Connected to ws://localhost:8000/ws/heartbeat" in the worker logs.*
+*Note: Multiple worker instances can run simultaneously for horizontal scaling.*
 
 ## 📁 Project Structure
 
-
+```
 ├── app/
-│   ├── app.py              # Main entry point and API routes
-│   ├── state.py            # UI logic and state management
+│   ├── app.py              # Reflex web portal entry point
+│   ├── state.py            # UI state management
 │   ├── models.py           # Database schema (SQLModel)
-│   ├── scheduler.py        # Background task that triggers jobs
-│   ├── websocket_server.py # Hub for worker communication
-│   ├── worker.py           # Standalone execution client
 │   ├── job_manager.py      # Dashboard UI components
-│   ├── utils.py            # Utility functions
+│   ├── utils.py            # Shared utilities (calculate_next_run)
 │   └── scripts/            # Directory for executable scripts
 │       └── test_job.py     # Sample test script
+├── services/
+│   ├── scheduler_service.py # Standalone scheduler service
+│   └── worker_service.py    # Standalone worker service
+├── tests/
+│   ├── test_scheduler.py    # Scheduler logic tests
+│   └── test_timezone_service.py # Timezone conversion tests
 ├── requirements.txt
 ├── rxconfig.py
 └── README.md
-
+```
 
 ## ✨ Features
 
-- **Real-time Dashboard**: Live job status updates via WebSocket
+- **Real-time Dashboard**: Live job status updates from database polling
 - **Multiple Schedule Types**: Interval, Hourly, Daily, Weekly, Monthly, Manual
 - **Timezone Support**: HKT (Hong Kong Time) display with UTC storage
 - **Execution Logs**: Full stdout/stderr capture with status tracking
-- **Worker Management**: Auto-reconnect, heartbeat monitoring
-- **MS SQL Compatible**: Database schema designed for enterprise migration
+- **Horizontal Scaling**: Run multiple worker instances for load distribution
+- **Fault Tolerance**: Services operate independently with automatic recovery
+- **Optimistic Locking**: Prevents duplicate job execution across workers
 
 ## 🕒 Timezone Handling
 
@@ -112,17 +146,20 @@ python -m app.worker
 
 ## 🛠️ Troubleshooting
 
-**"System Offline" in Dashboard:**
-- Is `app/worker.py` running?
-- Check worker logs for connection errors
-
 **Jobs Not Running:**
-- **Queued but not starting?** Check if the worker is "Online" in the dashboard
-- **Execution Error?** Check the "Execution Logs" panel for STDERR output
+- Ensure scheduler service is running: `python -m services.scheduler_service`
+- Ensure at least one worker is running: `python -m services.worker_service`
+- Check database for PENDING dispatches in `job_dispatch` table
 
-**Worker Connection Issues:**
-- Ensure WebSocket port (default 8000) is not blocked
-- For remote workers: `export REFLEX_SERVER_URL="ws://<server-ip>:8000/ws/heartbeat"`
+**Worker Not Processing Jobs:**
+- Check worker logs for database connection errors
+- Verify worker is registered in `worker_registration` table
+- Ensure script paths are absolute or relative to project root
+
+**Scheduler Not Dispatching:**
+- Check `next_run` timestamps in `scheduled_jobs` table
+- Verify `is_active=TRUE` for jobs that should run
+- Check scheduler logs for errors
 
 ## 📜 License
 

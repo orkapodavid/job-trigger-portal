@@ -3,12 +3,17 @@ import asyncio
 import logging
 import os
 import pytz
-import httpx
-from sqlmodel import Session, select, desc, create_engine
+from sqlmodel import Session, select, desc, create_engine, func
 from typing import Optional
-from datetime import datetime, timezone
-from app.models import ScheduledJob, JobExecutionLog, get_db_url, init_db
-from app.websocket_server import broadcaster
+from datetime import datetime, timezone, timedelta
+from app.models import (
+    ScheduledJob,
+    JobExecutionLog,
+    WorkerRegistration,
+    JobDispatch,
+    get_db_url,
+    init_db,
+)
 
 engine = create_engine(get_db_url())
 SCRIPTS_DIR = os.path.join(os.getcwd(), "app", "scripts")
@@ -51,11 +56,11 @@ def hkt_to_utc_schedule(schedule_type: str, time_str: str, day_val: Optional[int
         h, m = map(int, time_str.split(":"))
         dt_hkt = None
         if schedule_type == "daily":
-            dt_hkt = datetime(2024, 1, 1, h, m, 0, tzinfo=HKT)
+            dt_hkt = HKT.localize(datetime(2024, 1, 1, h, m, 0))
         elif schedule_type == "weekly":
-            dt_hkt = datetime(2024, 1, 1 + (day_val or 0), h, m, 0, tzinfo=HKT)
+            dt_hkt = HKT.localize(datetime(2024, 1, 1 + (day_val or 0), h, m, 0))
         elif schedule_type == "monthly":
-            dt_hkt = datetime(2024, 1, day_val or 1, h, m, 0, tzinfo=HKT)
+            dt_hkt = HKT.localize(datetime(2024, 1, day_val or 1, h, m, 0))
         else:
             return (time_str, day_val)
         dt_utc = dt_hkt.astimezone(timezone.utc)
@@ -118,7 +123,7 @@ class State(rx.State):
                 return "offline"
             elif diff > 90:
                 return "stale"
-            return "offline"
+            return "online"
         except Exception as e:
             logging.exception(f"Error calculating worker status: {e}")
             return "offline"
@@ -143,8 +148,41 @@ class State(rx.State):
         self.is_modal_open = value
 
     @rx.event
+    def load_workers(self):
+        """Load worker status from database."""
+        try:
+            with Session(engine) as session:
+                workers = session.exec(select(WorkerRegistration)).all()
+                
+                if not workers:
+                    self.worker_online = False
+                    self.active_workers_count = 0
+                    self.worker_id = ""
+                    self.last_heartbeat = ""
+                    self.worker_uptime = 0
+                    self.jobs_processed_count = 0
+                    return
+                
+                # Get the most active worker for display
+                best_worker = max(workers, key=lambda w: w.jobs_processed)
+                
+                self.active_workers_count = len(workers)
+                self.worker_online = True
+                self.worker_id = best_worker.worker_id
+                self.last_heartbeat = best_worker.last_heartbeat.isoformat()
+                self.worker_uptime = int(
+                    (datetime.now(timezone.utc) - best_worker.started_at).total_seconds()
+                )
+                self.jobs_processed_count = best_worker.jobs_processed
+                
+        except Exception as e:
+            logging.exception(f"Error loading workers: {e}")
+            self.worker_online = False
+            self.active_workers_count = 0
+
+    @rx.event
     def load_jobs(self):
-        """Fetch all scheduled jobs from the database."""
+        """Fetch all scheduled jobs from the database with dispatch status."""
         try:
             with Session(engine) as session:
                 query = select(ScheduledJob)
@@ -154,11 +192,25 @@ class State(rx.State):
                 results = session.exec(query).all()
                 self.jobs = []
                 running_ids = []
+                processing_ids = []
+                
                 for job in results:
                     job_dict = job.model_dump()
                     schedule_type = job.schedule_type or "interval"
-                    if schedule_type == "manual" and job.next_run:
-                        running_ids.append(job.id)
+                    
+                    # Check if job has pending/in-progress dispatches
+                    pending_dispatch = session.exec(
+                        select(JobDispatch)
+                        .where(JobDispatch.job_id == job.id)
+                        .where(JobDispatch.status.in_(["PENDING", "IN_PROGRESS"]))
+                        .order_by(JobDispatch.created_at.desc())
+                    ).first()
+                    
+                    if pending_dispatch:
+                        if pending_dispatch.status == "PENDING":
+                            running_ids.append(job.id)
+                        elif pending_dispatch.status == "IN_PROGRESS":
+                            processing_ids.append(job.id)
                     if schedule_type == "interval":
                         seconds = job.interval_seconds
                         if seconds >= 86400 and seconds % 86400 == 0:
@@ -213,6 +265,7 @@ class State(rx.State):
                         job_dict["formatted_interval"] = "Unknown Schedule"
                     self.jobs.append(job_dict)
                 self.running_job_ids = running_ids
+                self.processing_job_ids = processing_ids
         except Exception as e:
             logging.exception(f"Error loading jobs: {e}")
 
@@ -411,90 +464,22 @@ class State(rx.State):
         self.load_jobs()
 
     @rx.event(background=True)
-    async def fetch_worker_status(self):
-        """Poll the internal API for status (manual trigger)."""
-        worker_data = {}
-        try:
-            async with httpx.AsyncClient() as client:
-                res = await client.get(
-                    "http://localhost:8000/api/worker-status", timeout=2.0
-                )
-                if res.status_code == 200:
-                    worker_data = res.json()
-        except Exception as e:
-            logging.exception(f"Error fetching worker status: {e}")
-        async with self:
-            self._update_worker_state_from_data(worker_data)
-
-    def _update_worker_state_from_data(self, data: dict):
-        """Helper to update state variables from raw heartbeat data."""
-        self.active_workers_count = len(data) if data else 0
-        if not data:
-            self.worker_online = False
-            return
-        best_worker = None
-        max_uptime = -1
-        for wid, wdata in data.items():
-            try:
-                uptime = wdata.get("uptime_seconds", 0)
-                if uptime >= max_uptime:
-                    max_uptime = uptime
-                    best_worker = wdata
-            except Exception as e:
-                logging.exception(f"Error processing worker data item: {e}")
-                continue
-        if best_worker:
-            self.worker_id = best_worker.get("worker_id", "")
-            self.last_heartbeat = best_worker.get("timestamp", "")
-            self.worker_uptime = best_worker.get("uptime_seconds", 0)
-            self.jobs_processed_count = best_worker.get("jobs_processed", 0)
-            self.worker_online = True
-
-    @rx.event(background=True)
     async def on_load(self):
         """
-        Initial load and background event listener.
-        Subscribes to the global broadcaster to receive real-time updates from the worker.
+        Initial load and periodic refresh.
+        Loads jobs and worker status from database.
         """
         init_db()
         async with self:
             self.load_jobs()
-        yield State.fetch_worker_status
-        queue = await broadcaster.subscribe()
+            self.load_workers()
+        
+        # Periodic refresh loop (every 5 seconds)
         while True:
-            msg = await queue.get()
+            await asyncio.sleep(5)
             async with self:
-                msg_type = msg.get("type")
-                if msg_type == "heartbeat":
-                    worker_id = msg.get("worker_id")
-                    if worker_id:
-                        self.worker_id = worker_id
-                        self.last_heartbeat = msg.get("timestamp", "")
-                        self.worker_uptime = msg.get("uptime_seconds", 0)
-                        self.jobs_processed_count = msg.get("jobs_processed", 0)
-                        self.worker_online = True
-                        if self.active_workers_count == 0:
-                            self.active_workers_count = 1
-                elif msg_type == "event":
-                    event_name = msg.get("event")
-                    job_id = msg.get("job_id")
-                    if event_name == "job_started":
-                        if job_id and job_id not in self.processing_job_ids:
-                            self.processing_job_ids.append(job_id)
-                    elif event_name == "job_completed":
-                        if job_id and job_id in self.processing_job_ids:
-                            self.processing_job_ids.remove(job_id)
-                    if event_name in ["job_started", "job_completed"]:
-                        if self.auto_refresh:
-                            self.load_jobs()
-                            if self.selected_job_id:
-                                self.load_logs()
-                            if event_name == "job_completed":
-                                job_name = msg.get("job_name", "Unknown Job")
-                                status = msg.get("status", "FINISHED")
-                                if status == "FAILURE":
-                                    yield rx.toast.error(f"Job '{job_name}' failed!")
-                                else:
-                                    yield rx.toast.success(
-                                        f"Job '{job_name}' completed."
-                                    )
+                if self.auto_refresh:
+                    self.load_jobs()
+                    self.load_workers()
+                    if self.selected_job_id:
+                        self.load_logs()
