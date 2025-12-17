@@ -1,6 +1,9 @@
-sqlmodel
-pyodbc
-reflex
-PyGithub
-python-dateutil
 pytz
+httpx
+websockets
+pyodbc
+fastapi
+sqlmodel
+reflex
+python-dateutil
+PyGithub
