@@ -18,9 +18,10 @@ class ScheduledJob(SQLModel, table=True):
     Attributes:
         name: The display name of the job.
         script_path: The filesystem path to the script to execute.
-        interval_seconds: How often the job should run in seconds.
+        interval_seconds: How often the job should run in seconds (used if schedule_type is 'interval').
+        schedule_type: The type of schedule ('interval', 'hourly', 'daily', 'weekly', 'monthly', 'manual').
         is_active: Whether the job is currently enabled.
-        next_run: The calculated timestamp for the next scheduled execution.
+        next_run: The calculated timestamp for the next scheduled execution. None for manual jobs not currently queued.
     """
 
     __tablename__ = "scheduled_jobs"
