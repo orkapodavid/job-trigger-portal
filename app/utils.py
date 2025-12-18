@@ -7,6 +7,34 @@ from app.models import ScheduledJob
 logger = logging.getLogger("Utils")
 
 
+def ensure_utc_aware(dt: Optional[datetime]) -> Optional[datetime]:
+    """
+    Convert any datetime to timezone-aware UTC datetime.
+    
+    Args:
+        dt: A datetime object (naive or aware) or None
+    
+    Returns:
+        A timezone-aware datetime in UTC, or None if input is None
+    
+    Behavior:
+        - If input is None: returns None
+        - If input is already timezone-aware: returns as-is
+        - If input is timezone-naive: assumes UTC and adds timezone.utc
+    
+    This helper ensures all datetime arithmetic operations are safe
+    when working with database-retrieved datetime objects that may
+    lose timezone information (e.g., with SQLite backend).
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is not None and dt.tzinfo.utcoffset(dt) is not None:
+        # Already timezone-aware
+        return dt
+    # Timezone-naive, assume UTC
+    return dt.replace(tzinfo=timezone.utc)
+
+
 def calculate_next_run(job: ScheduledJob) -> Optional[datetime]:
     """
     Calculate the next scheduled run time based on schedule configuration.

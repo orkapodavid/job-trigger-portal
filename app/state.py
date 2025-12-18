@@ -14,6 +14,7 @@ from app.models import (
     get_db_url,
     init_db,
 )
+from app.utils import ensure_utc_aware
 
 engine = create_engine(get_db_url())
 SCRIPTS_DIR = os.path.join(os.getcwd(), "app", "scripts")
@@ -117,6 +118,8 @@ class State(rx.State):
             return "offline"
         try:
             last = datetime.fromisoformat(self.last_heartbeat)
+            # Ensure timezone-aware for safe comparison
+            last = ensure_utc_aware(last)
             now = datetime.now(timezone.utc)
             diff = (now - last).total_seconds()
             if diff > 180:
@@ -169,9 +172,11 @@ class State(rx.State):
                 self.active_workers_count = len(workers)
                 self.worker_online = True
                 self.worker_id = best_worker.worker_id
-                self.last_heartbeat = best_worker.last_heartbeat.isoformat()
+                self.last_heartbeat = best_worker.last_heartbeat.isoformat() if best_worker.last_heartbeat else ""
+                # Ensure timezone-aware before datetime arithmetic
+                started_at_aware = ensure_utc_aware(best_worker.started_at)
                 self.worker_uptime = int(
-                    (datetime.now(timezone.utc) - best_worker.started_at).total_seconds()
+                    (datetime.now(timezone.utc) - started_at_aware).total_seconds()
                 )
                 self.jobs_processed_count = best_worker.jobs_processed
                 
