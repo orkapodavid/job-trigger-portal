@@ -94,14 +94,32 @@ def create_job_modal() -> rx.Component:
                 ),
                 rx.el.div(
                     rx.el.label(
-                        "Script Path",
+                        "Select Script",
+                        class_name="block text-sm font-medium text-gray-700 mb-1",
+                    ),
+                    rx.el.select(
+                        rx.el.option(
+                            "Select a script...", value="", disabled=True, selected=True
+                        ),
+                        rx.foreach(
+                            State.available_scripts, lambda s: rx.el.option(s, value=s)
+                        ),
+                        on_change=State.set_new_job_script_path,
+                        value=State.new_job_script_path,
+                        class_name="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent",
+                    ),
+                    class_name="mb-4",
+                ),
+                rx.el.div(
+                    rx.el.label(
+                        "Script Arguments (Optional)",
                         class_name="block text-sm font-medium text-gray-700 mb-1",
                     ),
                     rx.el.input(
-                        on_change=State.set_new_job_script_path,
-                        placeholder="/path/to/script.py",
+                        on_change=State.set_new_job_script_args,
+                        placeholder="--arg1 value1 --flag",
                         class_name="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent",
-                        default_value=State.new_job_script_path,
+                        default_value=State.new_job_script_args,
                     ),
                     class_name="mb-4",
                 ),
@@ -310,8 +328,16 @@ def job_row(job: dict) -> rx.Component:
             rx.el.div(
                 rx.el.code(
                     job["script_path"],
-                    class_name="bg-gray-100 px-2 py-1 rounded text-xs text-gray-600 font-mono",
-                )
+                    class_name="bg-gray-100 px-2 py-1 rounded text-xs text-gray-600 font-mono block mb-1",
+                ),
+                rx.cond(
+                    job["script_args"],
+                    rx.el.code(
+                        job["script_args"],
+                        class_name="bg-violet-50 text-violet-600 px-2 py-0.5 rounded text-[10px] font-mono border border-violet-100",
+                    ),
+                ),
+                class_name="flex flex-col items-start",
             ),
             class_name="px-6 py-4 whitespace-nowrap text-sm",
         ),
