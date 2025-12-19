@@ -22,8 +22,6 @@ class ScheduledJob(SQLModel, table=True):
         schedule_type: The type of schedule ('interval', 'hourly', 'daily', 'weekly', 'monthly', 'manual').
         is_active: Whether the job is currently enabled.
         next_run: The calculated timestamp for the next scheduled execution. None for manual jobs not currently queued.
-        last_dispatched_at: Timestamp of last dispatch creation (audit trail).
-        dispatch_lock_until: Prevent redispatch until this time (prevents duplicate dispatches).
     """
 
     __tablename__ = "scheduled_jobs"
@@ -35,68 +33,11 @@ class ScheduledJob(SQLModel, table=True):
     schedule_time: Optional[str] = Field(default=None, nullable=True)
     schedule_day: Optional[int] = Field(default=None, nullable=True)
     is_active: bool = Field(default=True, nullable=False)
+    script_args: Optional[str] = Field(default=None, nullable=True)
     next_run: Optional[datetime] = Field(
         default=None, sa_column_kwargs={"nullable": True}
     )
-    last_dispatched_at: Optional[datetime] = Field(default=None, nullable=True)
-    dispatch_lock_until: Optional[datetime] = Field(default=None, nullable=True)
     logs: list["JobExecutionLog"] = Relationship(back_populates="job")
-
-
-class WorkerRegistration(SQLModel, table=True):
-    """
-    Model representing registered workers and their health status.
-
-    Attributes:
-        worker_id: Unique worker identifier.
-        hostname: Server hostname.
-        platform: OS platform (Windows/Linux/Mac).
-        started_at: Worker process start time.
-        last_heartbeat: Last heartbeat timestamp.
-        status: Worker status (IDLE, BUSY, OFFLINE).
-        jobs_processed: Total jobs processed by this worker.
-        current_job_id: Job currently being executed.
-        process_id: OS process ID.
-    """
-
-    __tablename__ = "worker_registration"
-    worker_id: str = Field(primary_key=True, max_length=50)
-    hostname: str = Field(nullable=False, max_length=255)
-    platform: str = Field(nullable=False, max_length=50)
-    started_at: datetime = Field(default_factory=get_utc_now, nullable=False)
-    last_heartbeat: datetime = Field(default_factory=get_utc_now, nullable=False)
-    status: str = Field(default="IDLE", nullable=False, max_length=20)
-    jobs_processed: int = Field(default=0, nullable=False)
-    current_job_id: Optional[int] = Field(default=None, nullable=True)
-    process_id: Optional[int] = Field(default=None, nullable=True)
-
-
-class JobDispatch(SQLModel, table=True):
-    """
-    Model representing job dispatch queue and execution tracking.
-
-    Attributes:
-        id: Unique dispatch ID.
-        job_id: Foreign key to ScheduledJob.
-        created_at: When dispatch was created.
-        claimed_at: When worker claimed job.
-        completed_at: When execution finished.
-        status: Dispatch status (PENDING, IN_PROGRESS, COMPLETED, FAILED, TIMEOUT).
-        worker_id: Worker that claimed/executed job.
-        retry_count: Number of retry attempts.
-        error_message: Error details if failed.
-    """
-
-    __tablename__ = "job_dispatch"
-    id: Optional[int] = Field(default=None, primary_key=True)
-    job_id: int = Field(foreign_key="scheduled_jobs.id", index=True, nullable=False)
-    created_at: datetime = Field(default_factory=get_utc_now, nullable=False, index=True)
-    claimed_at: Optional[datetime] = Field(default=None, nullable=True, index=True)
-    completed_at: Optional[datetime] = Field(default=None, nullable=True)
-    status: str = Field(default="PENDING", nullable=False, max_length=20, index=True)
-    worker_id: Optional[str] = Field(default=None, nullable=True, max_length=50, index=True)
-    retry_count: int = Field(default=0, nullable=False)
-    error_message: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
 
 
 class JobExecutionLog(SQLModel, table=True):
