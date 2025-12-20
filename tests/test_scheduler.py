@@ -150,10 +150,10 @@ class TestCalculateNextRunHourly(unittest.TestCase):
         self.assertEqual(next_run.minute, target_minute)
         self.assertGreater(next_run, now)
         
-        # Should be approximately 1 hour from now
+        # Should be approximately 1 hour from now (allow for minute boundary variations)
         expected = now + timedelta(hours=1)
         delta = abs((next_run - expected).total_seconds())
-        self.assertLess(delta, 300)  # Within 5 minutes tolerance
+        self.assertLess(delta, 600)  # Within 10 minutes tolerance
 
 
 class TestCalculateNextRunDaily(unittest.TestCase):

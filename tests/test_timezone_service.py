@@ -13,7 +13,7 @@ import os
 # Add parent directory to path to import app modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from app.state import hkt_to_utc_schedule, utc_to_hkt_schedule
+from app.utils import hkt_to_utc_schedule, utc_to_hkt_schedule
 
 
 class TestTimezoneConversion(unittest.TestCase):
@@ -236,16 +236,16 @@ class TestTimezoneEdgeCases(unittest.TestCase):
     def test_monthly_day_rollover_backward(self):
         """Test monthly schedule when UTC day rolls backward."""
         # 1st 05:00 HKT should become previous month's last day 21:00 UTC
-        # But we use fixed year/month in conversion, so day becomes 31st (of previous month conceptually)
+        # In our test setup (January), this becomes December 31st
         time_str = "05:00"
         schedule_type = "monthly"
         day_val = 1
-        
+
         utc_time, utc_day = hkt_to_utc_schedule(schedule_type, time_str, day_val)
-        
+
         self.assertEqual(utc_time, "21:00")
-        # Day rolls back to 31 (last day of previous month in our test setup)
-        self.assertLess(utc_day, day_val)
+        # Day rolls back to 31 (December 31st when converting from January 1st)
+        self.assertEqual(utc_day, 31)
 
     def test_all_hours_daily(self):
         """Test all 24 hours convert correctly for daily schedule."""

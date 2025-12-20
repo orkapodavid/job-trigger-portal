@@ -1,10 +1,110 @@
 import logging
 from datetime import datetime, timedelta, timezone
 from dateutil.relativedelta import relativedelta
-from typing import Optional
+from typing import Optional, Tuple
+import pytz
 from app.models import ScheduledJob
 
 logger = logging.getLogger("Utils")
+
+# Hong Kong Timezone
+HKT = pytz.timezone("Asia/Hong_Kong")
+
+
+def hkt_to_utc_schedule(
+    schedule_type: str, time_str: Optional[str], day_val: Optional[int]
+) -> Tuple[Optional[str], Optional[int]]:
+    """
+    Convert HKT schedule time to UTC for storage.
+
+    Args:
+        schedule_type: Type of schedule (daily, weekly, monthly, interval, manual)
+        time_str: Time in HH:MM format (HKT)
+        day_val: Day value (weekday 0-6 for weekly, day 1-31 for monthly)
+
+    Returns:
+        Tuple of (utc_time_str, utc_day_val)
+    """
+    if not time_str:
+        return (time_str, day_val)
+
+    if schedule_type in ("interval", "manual", "hourly"):
+        return (time_str, day_val)
+
+    try:
+        h, m = map(int, time_str.split(":"))
+    except (ValueError, AttributeError):
+        return (time_str, day_val)
+
+    dt_hkt = None
+
+    if schedule_type == "daily":
+        dt_hkt = HKT.localize(datetime(2024, 1, 1, h, m, 0))
+    elif schedule_type == "weekly":
+        dt_hkt = HKT.localize(datetime(2024, 1, 1 + (day_val or 0), h, m, 0))
+    elif schedule_type == "monthly":
+        dt_hkt = HKT.localize(datetime(2024, 1, day_val or 1, h, m, 0))
+    else:
+        return (time_str, day_val)
+
+    dt_utc = dt_hkt.astimezone(timezone.utc)
+    new_time = dt_utc.strftime("%H:%M")
+    new_day = None
+
+    if schedule_type == "weekly":
+        new_day = dt_utc.weekday()
+    elif schedule_type == "monthly":
+        new_day = dt_utc.day
+
+    return (new_time, new_day)
+
+
+def utc_to_hkt_schedule(
+    schedule_type: str, time_str: Optional[str], day_val: Optional[int]
+) -> Tuple[Optional[str], Optional[int]]:
+    """
+    Convert UTC schedule time to HKT for display.
+
+    Args:
+        schedule_type: Type of schedule (daily, weekly, monthly, interval, manual)
+        time_str: Time in HH:MM format (UTC)
+        day_val: Day value (weekday 0-6 for weekly, day 1-31 for monthly)
+
+    Returns:
+        Tuple of (hkt_time_str, hkt_day_val)
+    """
+    if not time_str:
+        return (time_str, day_val)
+
+    if schedule_type in ("interval", "manual", "hourly"):
+        return (time_str, day_val)
+
+    try:
+        h, m = map(int, time_str.split(":"))
+    except (ValueError, AttributeError):
+        return (time_str, day_val)
+
+    dt_utc = None
+
+    if schedule_type == "daily":
+        dt_utc = datetime(2024, 1, 1, h, m, 0, tzinfo=timezone.utc)
+    elif schedule_type == "weekly":
+        dt_utc = datetime(2024, 1, 1 + (day_val or 0), h, m, 0, tzinfo=timezone.utc)
+    elif schedule_type == "monthly":
+        dt_utc = datetime(2024, 1, day_val or 1, h, m, 0, tzinfo=timezone.utc)
+    else:
+        return (time_str, day_val)
+
+    dt_hkt = dt_utc.astimezone(HKT)
+    new_time = dt_hkt.strftime("%H:%M")
+    new_day = None
+
+    if schedule_type == "weekly":
+        new_day = dt_hkt.weekday()
+    elif schedule_type == "monthly":
+        new_day = dt_hkt.day
+
+    return (new_time, new_day)
 
 
 def ensure_utc_aware(dt: Optional[datetime]) -> Optional[datetime]:
@@ -49,9 +149,13 @@ def calculate_next_run(job: ScheduledJob) -> Optional[datetime]:
     minute = 0
     if job.schedule_time:
         try:
-            parts = job.schedule_time.split(":")
-            hour = int(parts[0])
-            minute = int(parts[1])
+            if ":" in job.schedule_time:
+                parts = job.schedule_time.split(":")
+                hour = int(parts[0])
+                minute = int(parts[1]) if len(parts) > 1 else 0
+            else:
+                # For hourly schedules, schedule_time may be just the minute
+                minute = int(job.schedule_time)
         except (ValueError, IndexError) as e:
             logger.exception(f"Error parsing schedule_time: {e}")
     target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
